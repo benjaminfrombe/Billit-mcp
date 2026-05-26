@@ -73,6 +73,10 @@ jobs:
       - run: uv sync --locked
       - name: Build package
         run: uv build
+      - name: Prepare hosted smoke database
+        run: |
+          BILLIT_MCP_DATABASE_URL=sqlite+aiosqlite:///.local/billit-mcp-ci.db \
+          uv run python -m billit_mcp.persistence.migrations
       - name: Bounded MCP startup smoke
         run: |
           set +e

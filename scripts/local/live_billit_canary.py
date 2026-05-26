@@ -7,23 +7,27 @@ import asyncio
 import json
 import os
 import platform
+import sqlite3
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+from urllib.parse import unquote
 
 from dotenv import load_dotenv
 from sqlalchemy import select
 
 from billit.client import BillitAPIClient, BillitOAuthSettings, BillitSettings
 from billit.endpoints import FINANCIAL_TRANSACTIONS_ENDPOINT, list_params, report_endpoint
-from billit.services.ai_composite import generate_invoice_summary
 from billit.smart_search import normalize_items
 from billit_mcp.auth.billit_oauth import BillitOAuthBridge
 from billit_mcp.auth.security import FernetCipher, JWTService, sha256_text
 from billit_mcp.hosted_config import HostedSettings
+from billit_mcp.local_api_key.runtime import LocalAPIKeyRuntime
+from billit_mcp.local_api_key.state import LocalStateStore
 from billit_mcp.persistence.database import HostedDatabase
+from billit_mcp.persistence.migrations import HOSTED_ALEMBIC_HEAD, run_migrations, stamp_migrations
 from billit_mcp.persistence.models import Actor, BillitCompany, BillitConnection, BillitOAuthGrant
 from billit_mcp.services.hosted_runtime import HostedToolRuntime
 from billit_mcp.services.invoice import build_invoice_preflight
@@ -33,6 +37,19 @@ if TYPE_CHECKING:
 
 SANDBOX_BASE_URL = "https://api.sandbox.billit.be/v1"
 SANDBOX_KEYCHAIN_SERVICE = "BILLIT_SANDBOX_API_KEY_K4K"
+HOSTED_TABLES = {
+    "actors",
+    "oauth_clients",
+    "oauth_authorization_transactions",
+    "oauth_auth_codes",
+    "oauth_token_revocations",
+    "billit_connections",
+    "billit_oauth_grants",
+    "billit_companies",
+    "confirmation_challenges",
+    "idempotency_records",
+    "audit_events",
+}
 
 
 class CanaryClient(Protocol):
@@ -165,7 +182,7 @@ def resolve_canary_settings(
             base_url=base_url,
             api_key=api_key,
             party_id=party_id,
-            context_party_id=os.getenv("BILLIT_CONTEXT_PARTY_ID"),
+            context_party_id=None,
             rate_limit_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "50")),
         ),
         environment=environment,
@@ -197,19 +214,33 @@ def probe_record(endpoint: str, response: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def api_key_header_proof(
+    client: CanaryClient, settings: BillitSettings
+) -> dict[str, bool | str | None]:
+    """Return sanitized proof that the local API-key client sends required headers."""
+
+    headers = getattr(getattr(client, "client", None), "headers", {})
+    return {
+        "api_key_header_present": "apiKey" in headers,
+        "party_id_header_correct": str(headers.get("PartyID")) == settings.party_id,
+        "party_id_header_name": "PartyID" if "PartyID" in headers else None,
+        "context_party_id_header_absent": "ContextPartyID" not in headers,
+    }
+
+
 async def run_canary(
     *,
     base_url: str = SANDBOX_BASE_URL,
     output_root: Path = Path(".local/billit-live-canary"),
     allow_writes: bool = False,
-    mode: str = "legacy-api-key-readonly",
+    mode: str = "api-key-readonly",
     keychain_reader: Callable[[str], str | None] = read_keychain_secret,
     client_factory: Callable[[BillitSettings], CanaryClient] = BillitAPIClient,
 ) -> Path:
     """Run the selected local live Billit canary mode."""
 
-    if mode == "legacy-api-key-readonly":
-        return await _run_legacy_api_key_canary(
+    if mode == "api-key-readonly":
+        return await _run_api_key_canary(
             base_url=base_url,
             output_root=output_root,
             allow_writes=allow_writes,
@@ -225,7 +256,7 @@ async def run_canary(
     raise SystemExit(f"Unsupported live canary mode: {mode}")
 
 
-async def _run_legacy_api_key_canary(
+async def _run_api_key_canary(
     *,
     base_url: str,
     output_root: Path,
@@ -233,14 +264,19 @@ async def _run_legacy_api_key_canary(
     keychain_reader: Callable[[str], str | None],
     client_factory: Callable[[BillitSettings], CanaryClient],
 ) -> Path:
-    """Run the legacy local/private API-key canary path."""
+    """Run the curated local/private API-key canary path."""
 
     settings = resolve_canary_settings(base_url, keychain_reader=keychain_reader)
-    raw_client = client_factory(settings.billit)
-    client = ReadOnlyBillitClient(raw_client, allow_writes=allow_writes)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output_dir = output_root / timestamp
     output_dir.mkdir(parents=True, exist_ok=False)
+    raw_client = client_factory(settings.billit)
+    client = ReadOnlyBillitClient(raw_client, allow_writes=allow_writes)
+    runtime = LocalAPIKeyRuntime(
+        settings=settings.billit,
+        state=LocalStateStore(output_dir / "local-api-key-state.db"),
+        client_factory=lambda _: client,
+    )
 
     probes: list[dict[str, Any]] = []
     try:
@@ -256,11 +292,58 @@ async def _run_legacy_api_key_canary(
         reports_resp = await client.request("GET", reports_endpoint)
         probes.append(probe_record(reports_endpoint, reports_resp))
 
-        composite_resp = await generate_invoice_summary(client, "2000-01-01", "2099-12-31")
-        probes.append(probe_record("composite:generate_invoice_summary", composite_resp))
-    finally:
-        await client.close()
+        connection_status = await runtime.connection_status()
+        probes.append(probe_record("curated:billit.connection_status", connection_status))
 
+        list_companies = await runtime.list_companies()
+        probes.append(probe_record("curated:billit.list_companies", list_companies))
+
+        search_orders = await runtime.search_orders(
+            direction="income", order_type="invoice", limit=5
+        )
+        probes.append(probe_record("curated:billit.search_orders", search_orders))
+
+        invoice_prepare = await runtime.invoice_prepare(
+            customer={"name": "Live canary placeholder"},
+            lines=[
+                {
+                    "description": "Read-only canary line",
+                    "quantity": 1,
+                    "unit_price": 1,
+                    "vat_percentage": 21,
+                }
+            ],
+            order_date=datetime.now(UTC).date().isoformat(),
+            expiry_date=(datetime.now(UTC) + timedelta(days=30)).date().isoformat(),
+            desired_transport="Peppol",
+        )
+        probes.append(probe_record("curated:billit.invoice.prepare", invoice_prepare))
+
+        invoice_summary = await runtime.invoice_summary(
+            start_date="2000-01-01",
+            end_date="2099-12-31",
+        )
+        probes.append(probe_record("curated:billit.invoice.summary", invoice_summary))
+
+        write_block = await runtime.invoice_create_draft(
+            customer={"name": "Live canary write block placeholder"},
+            lines=[{"description": "blocked", "quantity": 1, "unit_price": 1}],
+            order_date=datetime.now(UTC).date().isoformat(),
+            expiry_date=(datetime.now(UTC) + timedelta(days=30)).date().isoformat(),
+            idempotency_key="live-canary-write-block",
+        )
+        probes.append(
+            {
+                "endpoint": "curated:billit.invoice.create_draft.write_blocked",
+                "success": write_block.get("error_code") == "LOCAL_WRITES_DISABLED",
+                "error_code": write_block.get("error_code"),
+                "item_count": 0,
+            }
+        )
+    finally:
+        await runtime.close()
+
+    header_proof = api_key_header_proof(raw_client, settings.billit)
     passed = all(
         [
             any(
@@ -279,21 +362,48 @@ async def _run_legacy_api_key_canary(
             ),
             any(probe["endpoint"] == report_endpoint() and probe["success"] for probe in probes),
             any(
-                probe["endpoint"] == "composite:generate_invoice_summary" and probe["success"]
+                probe["endpoint"] == "curated:billit.connection_status" and probe["success"]
                 for probe in probes
             ),
+            any(
+                probe["endpoint"] == "curated:billit.list_companies" and probe["success"]
+                for probe in probes
+            ),
+            any(
+                probe["endpoint"] == "curated:billit.search_orders" and probe["success"]
+                for probe in probes
+            ),
+            any(
+                probe["endpoint"] == "curated:billit.invoice.prepare" and probe["success"]
+                for probe in probes
+            ),
+            any(
+                probe["endpoint"] == "curated:billit.invoice.summary" and probe["success"]
+                for probe in probes
+            ),
+            any(
+                probe["endpoint"] == "curated:billit.invoice.create_draft.write_blocked"
+                and probe["success"]
+                for probe in probes
+            ),
+            header_proof["api_key_header_present"],
+            header_proof["party_id_header_correct"],
+            header_proof["context_party_id_header_absent"],
         ]
     )
 
     report = {
         "timestamp": timestamp,
-        "mode": "legacy-api-key-readonly",
+        "mode": "api-key-readonly",
         "environment": settings.environment,
         "base_url_host": base_url.replace("https://", "").replace("http://", "").split("/")[0],
         "read_only": True,
         "writes_enabled": allow_writes,
         "key_source": settings.key_source,
         "keychain_service": SANDBOX_KEYCHAIN_SERVICE,
+        "explicit_party_id": True,
+        "header_proof": header_proof,
+        "local_state_db": "local-api-key-state.db",
         "endpoint_decisions": {
             "financial_transactions": FINANCIAL_TRANSACTIONS_ENDPOINT,
             "reports": report_endpoint(),
@@ -335,7 +445,7 @@ async def _run_hosted_oauth_canary(
 
     probes: list[dict[str, Any]] = []
     try:
-        await database.create_all()
+        migration_state = await ensure_hosted_canary_schema(settings.database_url)
         connection = await _resolve_hosted_canary_connection(database)
         await _force_hosted_refresh(database, connection.connection_id)
         token = await bridge.get_billit_access_token(connection_id=connection.connection_id)
@@ -445,6 +555,7 @@ async def _run_hosted_oauth_canary(
         "writes_enabled": allow_writes,
         "party_id_present": True,
         "hosted_oauth_refresh_forced": True,
+        "hosted_schema_state": migration_state,
         "endpoint_decisions": {
             "financial_transactions": FINANCIAL_TRANSACTIONS_ENDPOINT,
             "reports": report_endpoint(),
@@ -457,6 +568,56 @@ async def _run_hosted_oauth_canary(
     if not passed:
         raise SystemExit(f"Hosted OAuth live canary failed; sanitized report: {report_path}")
     return report_path
+
+
+async def ensure_hosted_canary_schema(database_url: str) -> str:
+    """Run migrations, or stamp a compatible local SQLite schema from old canary runs."""
+
+    try:
+        await asyncio.to_thread(run_migrations, database_url)
+        return "migrated_or_current"
+    except Exception:
+        if not _can_stamp_existing_local_sqlite_schema(database_url):
+            raise
+        await asyncio.to_thread(stamp_migrations, database_url)
+        return "stamped_existing_local_sqlite_schema"
+
+
+def _can_stamp_existing_local_sqlite_schema(database_url: str) -> bool:
+    """Return true for local SQLite hosted DBs that already have all hosted tables."""
+
+    path = _sqlite_file_path(database_url)
+    if path is None or not path.exists():
+        return False
+    connection = sqlite3.connect(path)
+    try:
+        tables = {
+            str(row[0])
+            for row in connection.execute(
+                "select name from sqlite_master where type = 'table'"
+            ).fetchall()
+        }
+        if not HOSTED_TABLES.issubset(tables):
+            return False
+        if "alembic_version" not in tables:
+            return True
+        revisions = [
+            str(row[0])
+            for row in connection.execute("select version_num from alembic_version").fetchall()
+        ]
+        return not revisions or revisions == [HOSTED_ALEMBIC_HEAD]
+    finally:
+        connection.close()
+
+
+def _sqlite_file_path(database_url: str) -> Path | None:
+    prefix = "sqlite+aiosqlite:///"
+    if not database_url.startswith(prefix):
+        return None
+    raw_path = unquote(database_url.removeprefix(prefix))
+    if raw_path == ":memory:":
+        return None
+    return Path(raw_path)
 
 
 async def _resolve_hosted_canary_connection(database: HostedDatabase) -> BillitConnection:
@@ -562,8 +723,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["legacy-api-key-readonly", "hosted-oauth-readonly"],
-        default="legacy-api-key-readonly",
+        choices=["api-key-readonly", "hosted-oauth-readonly"],
+        default="api-key-readonly",
         help="Canary mode. Hosted mode requires a pre-seeded sandbox OAuth grant.",
     )
     return parser.parse_args()
