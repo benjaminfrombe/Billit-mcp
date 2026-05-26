@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from billit_mcp.services.filters import compile_order_params
+from billit_mcp.services.filters import compile_order_params, compile_party_params
 from billit_mcp.services.hosted_runtime import (
+    HostedToolError,
     HostedToolRuntime,
-    error_result,
     hash_payload,
     success,
 )
@@ -28,8 +28,7 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
     async def connection_status(environment: str = "sandbox") -> dict[str, Any]:
         """Return the current hosted Billit connection status."""
 
-        try:
-            claims = await runtime.claims("billit:read")
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
             connection = await runtime.resolve_connection(
                 actor_id=str(claims["sub"]), environment=environment
             )
@@ -41,19 +40,24 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                     "connection_id": connection.connection_id,
                 }
             )
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.connection_status",
+            required_scope="billit:read",
+            operation_class="read",
+            handler=handler,
+            environment=environment,
+        )
 
     @mcp.tool(name="billit.list_companies")
     async def list_companies(environment: str = "sandbox") -> dict[str, Any]:
         """List companies authorized for the current Billit connection."""
 
-        try:
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
             from sqlalchemy import select
 
             from billit_mcp.persistence.models import BillitCompany
 
-            claims = await runtime.claims("billit:read")
             connection = await runtime.resolve_connection(
                 actor_id=str(claims["sub"]), environment=environment
             )
@@ -67,18 +71,24 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                         )
                     )
                 ).all()
-                data = [
-                    {
-                        "company_party_id": company.company_party_id,
-                        "environment": company.environment,
-                        "active": company.active,
-                        "is_default": company.is_default,
-                    }
-                    for company in companies
-                ]
+            data = [
+                {
+                    "company_party_id": company.company_party_id,
+                    "environment": company.environment,
+                    "active": company.active,
+                    "is_default": company.is_default,
+                }
+                for company in companies
+            ]
             return success({"companies": data})
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.list_companies",
+            required_scope="billit:read",
+            operation_class="read",
+            handler=handler,
+            environment=environment,
+        )
 
     @mcp.tool(name="billit.search_orders")
     async def search_orders(
@@ -94,10 +104,12 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
     ) -> dict[str, Any]:
         """Search orders using structured allowlisted filters."""
 
-        try:
-            claims = await runtime.claims("billit:read")
-            connection, client = await runtime.billit_client(
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
+            _, client = await runtime.billit_client(
                 actor_id=str(claims["sub"]),
+                client_id=str(claims["client_id"]),
+                correlation_id=str(claims["jti"]),
+                tool_name="billit.search_orders",
                 environment=environment,
                 company_party_id=company_party_id,
             )
@@ -114,29 +126,26 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                 return await client.request("GET", "/orders", params=params)
             finally:
                 await client.close()
-                await runtime.audit(
-                    actor_id=str(claims["sub"]),
-                    client_id=str(claims["client_id"]),
-                    connection_id=connection.connection_id,
-                    environment=environment,
-                    company_party_id=company_party_id,
-                    event_type="tool_call",
-                    operation_class="read",
-                    tool_name="billit.search_orders",
-                    outcome="success",
-                    correlation_id=str(claims["jti"]),
-                )
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.search_orders",
+            required_scope="billit:read",
+            operation_class="read",
+            handler=handler,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
 
     @mcp.tool(name="billit.get_order")
     async def get_order(environment: str, company_party_id: int, order_id: int) -> dict[str, Any]:
         """Get one Billit order by ID."""
 
-        try:
-            claims = await runtime.claims("billit:read")
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
             _, client = await runtime.billit_client(
                 actor_id=str(claims["sub"]),
+                client_id=str(claims["client_id"]),
+                correlation_id=str(claims["jti"]),
+                tool_name="billit.get_order",
                 environment=environment,
                 company_party_id=company_party_id,
             )
@@ -144,8 +153,15 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                 return await client.request("GET", f"/orders/{order_id}")
             finally:
                 await client.close()
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.get_order",
+            required_scope="billit:read",
+            operation_class="read",
+            handler=handler,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
 
     @mcp.tool(name="billit.resolve_party")
     async def resolve_party(
@@ -159,25 +175,22 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
     ) -> dict[str, Any]:
         """Resolve a customer or supplier without guessing on ambiguity."""
 
-        try:
-            claims = await runtime.claims("billit:read")
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
             _, client = await runtime.billit_client(
                 actor_id=str(claims["sub"]),
+                client_id=str(claims["client_id"]),
+                correlation_id=str(claims["jti"]),
+                tool_name="billit.resolve_party",
                 environment=environment,
                 company_party_id=company_party_id,
             )
-            filters: list[str] = [
-                f"PartyType eq '{'Customer' if role == 'customer' else 'Supplier'}'"
-            ]
-            if external_provider_id:
-                filters.append(f"ExternalProviderID eq '{_odata_escape(external_provider_id)}'")
-            elif vat_number:
-                filters.append(f"VATNumber eq '{_odata_escape(vat_number)}'")
-            elif email:
-                filters.append(f"Email eq '{_odata_escape(email)}'")
-            elif name:
-                filters.append(f"contains(Name,'{_odata_escape(name)}')")
-            params = {"$filter": " and ".join(filters), "$top": 5}
+            params = compile_party_params(
+                role=role,
+                name=name,
+                vat_number=vat_number,
+                email=email,
+                external_provider_id=external_provider_id,
+            )
             try:
                 response = await client.request("GET", "/parties", params=params)
             finally:
@@ -209,8 +222,15 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                     "safe_to_use": False,
                 }
             )
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.resolve_party",
+            required_scope="billit:read",
+            operation_class="read",
+            handler=handler,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
 
     @mcp.tool(name="billit.lookup_peppol_receiver")
     async def lookup_peppol_receiver(
@@ -220,10 +240,12 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
     ) -> dict[str, Any]:
         """Check whether a receiver identifier is visible on Peppol."""
 
-        try:
-            claims = await runtime.claims("billit:read")
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
             _, client = await runtime.billit_client(
                 actor_id=str(claims["sub"]),
+                client_id=str(claims["client_id"]),
+                correlation_id=str(claims["jti"]),
+                tool_name="billit.lookup_peppol_receiver",
                 environment=environment,
                 company_party_id=company_party_id,
             )
@@ -231,8 +253,15 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                 return await client.request("GET", f"/peppol/participantInformation/{identifier}")
             finally:
                 await client.close()
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.lookup_peppol_receiver",
+            required_scope="billit:read",
+            operation_class="read",
+            handler=handler,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
 
     @mcp.tool(name="billit.invoice.prepare")
     async def invoice_prepare(
@@ -246,8 +275,7 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
     ) -> dict[str, Any]:
         """Read-only invoice preflight."""
 
-        try:
-            claims = await runtime.claims("billit:read")
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
             connection = await runtime.resolve_connection(
                 actor_id=str(claims["sub"]), environment=environment
             )
@@ -265,8 +293,15 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                     desired_transport=desired_transport,
                 )
             )
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.invoice.prepare",
+            required_scope="billit:read",
+            operation_class="read",
+            handler=handler,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
 
     @mcp.tool(name="billit.invoice.create_draft")
     async def invoice_create_draft(
@@ -281,10 +316,12 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
     ) -> dict[str, Any]:
         """Create a Billit sales invoice draft without sending it."""
 
-        try:
-            claims = await runtime.claims("billit:invoice.create")
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
             connection, client = await runtime.billit_client(
                 actor_id=str(claims["sub"]),
+                client_id=str(claims["client_id"]),
+                correlation_id=str(claims["jti"]),
+                tool_name="billit.invoice.create_draft",
                 environment=environment,
                 company_party_id=company_party_id,
             )
@@ -296,28 +333,68 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                 external_provider_id=external_provider_id,
             )
             operation_hash = hash_payload(payload)
+            idempotency_id: str | None = None
             if idempotency_key:
-                await runtime.record_idempotency_started(
+                record = await runtime.record_idempotency_started(
                     connection_id=connection.connection_id,
                     company_party_id=company_party_id,
                     operation_type="invoice_create_draft",
                     idempotency_key=idempotency_key,
                     operation_hash=operation_hash,
                 )
+                idempotency_id = record.idempotency_id
+                if record.status == "succeeded" and record.billit_resource_id:
+                    return success(
+                        {
+                            "idempotent_replay": True,
+                            "order_id": record.billit_resource_id,
+                        }
+                    )
+                if record.status in {"conflict", "unknown_side_effect"}:
+                    raise HostedToolError(
+                        "idempotency_replay_blocked",
+                        f"Prior operation state is {record.status}",
+                    )
             headers = {"Idempotency-Key": idempotency_key} if idempotency_key else None
             try:
                 response = await client.request("POST", "/orders", json=payload, headers=headers)
-                order_id = response.get("data")
-                if isinstance(order_id, dict):
-                    order_id = order_id.get("OrderID") or order_id.get("ID")
+                order_id = _order_id_from_response(response.get("data"))
                 if response.get("success") and order_id:
+                    if idempotency_id:
+                        await runtime.record_idempotency_outcome(
+                            idempotency_id=idempotency_id,
+                            status="succeeded",
+                            billit_resource_type="order",
+                            billit_resource_id=str(order_id),
+                        )
                     detail = await client.request("GET", f"/orders/{order_id}")
                     return detail if detail.get("success") else response
+                if idempotency_id:
+                    await runtime.record_idempotency_outcome(
+                        idempotency_id=idempotency_id,
+                        status="failed",
+                        billit_error_code=str(response.get("error_code") or "BILLIT_ERROR"),
+                    )
                 return response
+            except Exception:
+                if idempotency_id:
+                    await runtime.record_idempotency_outcome(
+                        idempotency_id=idempotency_id,
+                        status="unknown_side_effect",
+                        billit_error_code="BILLIT_REQUEST_EXCEPTION",
+                    )
+                raise
             finally:
                 await client.close()
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.invoice.create_draft",
+            required_scope="billit:invoice.create",
+            operation_class="write",
+            handler=handler,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
 
     @mcp.tool(name="billit.invoice.prepare_send")
     async def invoice_prepare_send(
@@ -329,10 +406,12 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
     ) -> dict[str, Any]:
         """Prepare a server-owned confirmation challenge before sending an invoice."""
 
-        try:
-            claims = await runtime.claims("billit:invoice.send")
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
             connection, client = await runtime.billit_client(
                 actor_id=str(claims["sub"]),
+                client_id=str(claims["client_id"]),
+                correlation_id=str(claims["jti"]),
+                tool_name="billit.invoice.prepare_send",
                 environment=environment,
                 company_party_id=company_party_id,
             )
@@ -348,6 +427,7 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                 transport_type=transport_type,
                 strict_transport=strict_transport,
             )
+            _raise_if_send_ineligible(summary)
             challenge = await runtime.create_confirmation_challenge(
                 actor_id=str(claims["sub"]),
                 client_id=str(claims["client_id"]),
@@ -361,8 +441,15 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                 summary=summary,
             )
             return success(challenge)
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.invoice.prepare_send",
+            required_scope="billit:invoice.send",
+            operation_class="external_send",
+            handler=handler,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
 
     @mcp.tool(name="billit.invoice.confirm_send")
     async def invoice_confirm_send(
@@ -374,41 +461,90 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
     ) -> dict[str, Any]:
         """Consume a confirmation challenge and send the invoice."""
 
-        try:
-            claims = await runtime.claims("billit:invoice.send")
-            challenge = await runtime.consume_confirmation_challenge(
-                challenge_id=challenge_id,
-                confirmation_token=confirmation_token,
-                operation_hash=operation_hash,
-                actor_id=str(claims["sub"]),
-                client_id=str(claims["client_id"]),
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
+            connection = await runtime.resolve_connection(
+                actor_id=str(claims["sub"]), environment=environment
             )
-            if (
-                challenge.environment != environment
-                or challenge.company_party_id != company_party_id
-            ):
-                return error_result(ValueError("Challenge company/environment mismatch"))
-            _, client = await runtime.billit_client(
-                actor_id=str(claims["sub"]),
+            await runtime.validate_company(
+                connection_id=connection.connection_id,
                 environment=environment,
                 company_party_id=company_party_id,
             )
-            summary = challenge.summary_json
-            headers = {"StrictTransportType": "true"} if summary.get("strict_transport") else None
+            challenge = await runtime.get_pending_confirmation_challenge(
+                challenge_id=challenge_id,
+                actor_id=str(claims["sub"]),
+                client_id=str(claims["client_id"]),
+                environment=environment,
+                company_party_id=company_party_id,
+                operation_type="invoice_send",
+                resource_type="order",
+                required_scope="billit:invoice.send",
+            )
+            order_id = str(challenge.resource_id)
+            _, client = await runtime.billit_client(
+                actor_id=str(claims["sub"]),
+                client_id=str(claims["client_id"]),
+                correlation_id=str(claims["jti"]),
+                tool_name="billit.invoice.confirm_send",
+                environment=environment,
+                company_party_id=company_party_id,
+            )
             try:
+                order = await client.request("GET", f"/orders/{order_id}")
+                if not order.get("success"):
+                    return order
+                current_summary = build_send_summary(
+                    order.get("data"),
+                    company_party_id=company_party_id,
+                    transport_type=str(challenge.summary_json["transport_type"]),
+                    strict_transport=bool(challenge.summary_json["strict_transport"]),
+                )
+                _raise_if_send_ineligible(current_summary)
+                current_hash = hash_payload(current_summary)
+                if current_hash != challenge.operation_hash or current_hash != operation_hash:
+                    raise HostedToolError(
+                        "challenge_changed",
+                        "Invoice state changed after the confirmation challenge was created",
+                    )
+                consumed = await runtime.consume_confirmation_challenge(
+                    challenge_id=challenge_id,
+                    confirmation_token=confirmation_token,
+                    operation_hash=current_hash,
+                    actor_id=str(claims["sub"]),
+                    client_id=str(claims["client_id"]),
+                    connection_id=connection.connection_id,
+                    environment=environment,
+                    company_party_id=company_party_id,
+                    operation_type="invoice_send",
+                    resource_type="order",
+                    resource_id=order_id,
+                    required_scope="billit:invoice.send",
+                )
+                headers = (
+                    {"StrictTransportType": "true"}
+                    if consumed.summary_json.get("strict_transport")
+                    else None
+                )
                 return await client.request(
                     "POST",
                     "/orders/commands/send",
                     json={
-                        "Transporttype": summary["transport_type"],
-                        "OrderIDs": [int(summary["order_id"])],
+                        "Transporttype": consumed.summary_json["transport_type"],
+                        "OrderIDs": [int(order_id)],
                     },
                     headers=headers,
                 )
             finally:
                 await client.close()
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.invoice.confirm_send",
+            required_scope="billit:invoice.send",
+            operation_class="external_send",
+            handler=handler,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
 
     @mcp.tool(name="billit.invoice.get_delivery_status")
     async def invoice_get_delivery_status(
@@ -418,10 +554,12 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
     ) -> dict[str, Any]:
         """Return a concise fresh-read delivery status."""
 
-        try:
-            claims = await runtime.claims("billit:read")
+        async def handler(claims: dict[str, Any]) -> dict[str, Any]:
             _, client = await runtime.billit_client(
                 actor_id=str(claims["sub"]),
+                client_id=str(claims["client_id"]),
+                correlation_id=str(claims["jti"]),
+                tool_name="billit.invoice.get_delivery_status",
                 environment=environment,
                 company_party_id=company_party_id,
             )
@@ -444,8 +582,15 @@ def register_hosted_tools(mcp: FastMCP, runtime: HostedToolRuntime) -> None:
                     "source": "fresh_billit_read",
                 }
             )
-        except Exception as exc:
-            return error_result(exc)
+
+        return await runtime.execute_tool(
+            tool_name="billit.invoice.get_delivery_status",
+            required_scope="billit:read",
+            operation_class="read",
+            handler=handler,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
 
 
 def _items(data: Any) -> list[dict[str, Any]]:
@@ -455,5 +600,14 @@ def _items(data: Any) -> list[dict[str, Any]]:
     return data if isinstance(data, list) else []
 
 
-def _odata_escape(value: str) -> str:
-    return value.replace("'", "''")
+def _order_id_from_response(data: Any) -> Any:
+    if isinstance(data, dict):
+        return data.get("OrderID") or data.get("ID")
+    return data
+
+
+def _raise_if_send_ineligible(summary: dict[str, Any]) -> None:
+    if not summary.get("order_id"):
+        raise HostedToolError("invoice_send_ineligible", "Order ID is missing from Billit order")
+    if summary.get("is_sent"):
+        raise HostedToolError("invoice_already_sent", "Invoice is already marked as sent")

@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -32,11 +33,25 @@ class HostedDatabase:
         self.engine: AsyncEngine = create_async_engine(database_url)
         self.session_factory = async_sessionmaker(self.engine, expire_on_commit=False)
 
-    async def create_all(self) -> None:
-        """Create all hosted tables for local development and tests."""
+    async def create_all_for_tests_only(self) -> None:
+        """Create all hosted tables for isolated tests that do not exercise migrations."""
 
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+    async def ping(self) -> None:
+        """Run a cheap database connectivity check."""
+
+        async with self.engine.connect() as conn:
+            await conn.execute(text("select 1"))
+
+    async def alembic_revision(self) -> str | None:
+        """Return the current Alembic revision, or None when migrations are absent."""
+
+        async with self.engine.connect() as conn:
+            result = await conn.execute(text("select version_num from alembic_version"))
+            value = result.scalar_one_or_none()
+            return str(value) if value is not None else None
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:

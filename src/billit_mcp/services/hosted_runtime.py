@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -24,6 +26,15 @@ if TYPE_CHECKING:
     from billit_mcp.auth.security import JWTService
     from billit_mcp.hosted_config import HostedSettings
     from billit_mcp.persistence.database import HostedDatabase
+
+
+SECURITY_DENIALS = {
+    "unauthenticated",
+    "insufficient_scope",
+    "billit_not_connected",
+    "billit_reauthorization_required",
+    "unauthorized_company",
+}
 
 
 class HostedToolError(RuntimeError):
@@ -100,6 +111,57 @@ class HostedToolRuntime:
             )
         return claims
 
+    async def execute_tool(
+        self,
+        *,
+        tool_name: str,
+        required_scope: str,
+        operation_class: str,
+        handler: Any,
+        environment: str | None = None,
+        company_party_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Run a hosted tool with centralized scope checks, errors, and audit."""
+
+        started = perf_counter()
+        claims: dict[str, Any] | None = None
+        result: dict[str, Any]
+        outcome = "success"
+        error_code: str | None = None
+        try:
+            claims = await self.claims(required_scope)
+            result = await handler(claims)
+            if not result.get("success", False):
+                outcome = "failure"
+                error_code = str(result.get("error_code") or "HOSTED_TOOL_FAILURE")
+            return result
+        except Exception as exc:
+            result = error_result(exc)
+            if isinstance(exc, HostedToolError) and exc.error_type in SECURITY_DENIALS:
+                outcome = "denied"
+            else:
+                outcome = "failure"
+            error_code = str(result.get("error_code") or "HOSTED_TOOL_ERROR")
+            return result
+        finally:
+            correlation_id = str((claims or {}).get("jti") or random_token_urlsafe())
+            with suppress(Exception):
+                await self.audit(
+                    actor_id=str(claims["sub"]) if claims and claims.get("sub") else None,
+                    client_id=str(claims["client_id"])
+                    if claims and claims.get("client_id")
+                    else None,
+                    event_type="tool_call",
+                    operation_class=operation_class,
+                    outcome=outcome,
+                    correlation_id=correlation_id,
+                    environment=environment,
+                    company_party_id=company_party_id,
+                    tool_name=tool_name,
+                    error_code=error_code,
+                    latency_ms=int((perf_counter() - started) * 1000),
+                )
+
     async def resolve_connection(
         self,
         *,
@@ -159,7 +221,10 @@ class HostedToolRuntime:
         actor_id: str,
         environment: str,
         company_party_id: int,
-    ) -> tuple[BillitConnection, BillitAPIClient]:
+        client_id: str | None = None,
+        correlation_id: str | None = None,
+        tool_name: str | None = None,
+    ) -> tuple[BillitConnection, AuditedBillitClient]:
         """Return a Billit client for an authorized hosted request."""
 
         connection = await self.resolve_connection(actor_id=actor_id, environment=environment)
@@ -168,11 +233,40 @@ class HostedToolRuntime:
             environment=environment,
             company_party_id=company_party_id,
         )
-        client = await self.billit_bridge.make_client(
-            connection_id=connection.connection_id,
-            company_party_id=company_party_id,
+        try:
+            client = await self.billit_bridge.make_client(
+                connection_id=connection.connection_id,
+                company_party_id=company_party_id,
+            )
+        except Exception:
+            await self.audit(
+                actor_id=actor_id,
+                client_id=client_id,
+                connection_id=connection.connection_id,
+                environment=environment,
+                company_party_id=company_party_id,
+                event_type="billit_oauth_refresh_failed",
+                operation_class="auth",
+                outcome="failure",
+                correlation_id=correlation_id or random_token_urlsafe(),
+                tool_name=tool_name,
+                error_code="BILLIT_REFRESH_FAILED",
+            )
+            raise
+        return (
+            connection,
+            AuditedBillitClient(
+                client=client,
+                runtime=self,
+                actor_id=actor_id,
+                client_id=client_id,
+                connection_id=connection.connection_id,
+                environment=environment,
+                company_party_id=company_party_id,
+                correlation_id=correlation_id or random_token_urlsafe(),
+                tool_name=tool_name,
+            ),
         )
-        return connection, client
 
     async def create_confirmation_challenge(
         self,
@@ -211,6 +305,18 @@ class HostedToolRuntime:
         )
         async with self.database.session() as session:
             session.add(challenge)
+        await self.audit(
+            actor_id=actor_id,
+            client_id=client_id,
+            connection_id=connection_id,
+            environment=environment,
+            company_party_id=company_party_id,
+            event_type="confirmation_challenge_created",
+            operation_class="confirmation",
+            outcome="challenge_created",
+            correlation_id=nonce,
+            summary={"operation_type": operation_type, "resource_type": resource_type},
+        )
         return {
             "challenge_id": challenge.challenge_id,
             "confirmation_token": token,
@@ -227,6 +333,13 @@ class HostedToolRuntime:
         operation_hash: str,
         actor_id: str,
         client_id: str,
+        connection_id: str,
+        environment: str,
+        company_party_id: int,
+        operation_type: str,
+        resource_type: str,
+        resource_id: str,
+        required_scope: str,
     ) -> ConfirmationChallenge:
         """Atomically consume a pending confirmation challenge."""
 
@@ -243,18 +356,94 @@ class HostedToolRuntime:
                 raise HostedToolError("challenge_expired", "Confirmation challenge is not pending")
             if challenge.actor_id != actor_id or challenge.client_id != client_id:
                 raise HostedToolError("challenge_actor_mismatch", "Challenge actor/client mismatch")
+            if (
+                challenge.connection_id != connection_id
+                or challenge.environment != environment
+                or challenge.company_party_id != company_party_id
+                or challenge.operation_type != operation_type
+                or challenge.resource_type != resource_type
+                or challenge.resource_id != resource_id
+                or challenge.required_scope != required_scope
+            ):
+                raise HostedToolError("challenge_mismatch", "Challenge invariants do not match")
             if challenge.confirmation_token_hash != sha256_text(confirmation_token):
                 raise HostedToolError("challenge_token_invalid", "Confirmation token is invalid")
             if challenge.operation_hash != operation_hash:
                 raise HostedToolError("challenge_changed", "Operation hash changed")
-            await session.execute(
+            comparison_now = now if challenge.expires_at.tzinfo else now.replace(tzinfo=None)
+            result = await session.execute(
                 update(ConfirmationChallenge)
                 .where(
                     ConfirmationChallenge.challenge_id == challenge_id,
                     ConfirmationChallenge.status == "pending",
+                    ConfirmationChallenge.actor_id == actor_id,
+                    ConfirmationChallenge.client_id == client_id,
+                    ConfirmationChallenge.connection_id == connection_id,
+                    ConfirmationChallenge.environment == environment,
+                    ConfirmationChallenge.company_party_id == company_party_id,
+                    ConfirmationChallenge.operation_type == operation_type,
+                    ConfirmationChallenge.resource_type == resource_type,
+                    ConfirmationChallenge.resource_id == resource_id,
+                    ConfirmationChallenge.required_scope == required_scope,
+                    ConfirmationChallenge.operation_hash == operation_hash,
+                    ConfirmationChallenge.confirmation_token_hash
+                    == sha256_text(confirmation_token),
+                    ConfirmationChallenge.expires_at > comparison_now,
                 )
                 .values(status="consumed", consumed_at=now)
             )
+            if getattr(result, "rowcount", 0) != 1:
+                raise HostedToolError("challenge_consume_failed", "Confirmation was not consumed")
+            challenge.status = "consumed"
+            challenge.consumed_at = now
+            session.expunge(challenge)
+        with suppress(Exception):
+            await self.audit(
+                actor_id=actor_id,
+                client_id=client_id,
+                connection_id=connection_id,
+                environment=environment,
+                company_party_id=company_party_id,
+                event_type="confirmation_challenge_consumed",
+                operation_class="confirmation",
+                outcome="challenge_consumed",
+                correlation_id=random_token_urlsafe(),
+                summary={"operation_type": operation_type, "resource_type": resource_type},
+            )
+        return challenge
+
+    async def get_pending_confirmation_challenge(
+        self,
+        *,
+        challenge_id: str,
+        actor_id: str,
+        client_id: str,
+        environment: str,
+        company_party_id: int,
+        operation_type: str,
+        resource_type: str,
+        required_scope: str,
+    ) -> ConfirmationChallenge:
+        """Load a pending challenge without consuming it for pre-send revalidation."""
+
+        async with self.database.session() as session:
+            challenge = await session.get(ConfirmationChallenge, challenge_id)
+            if challenge is None:
+                raise HostedToolError("challenge_not_found", "Confirmation challenge not found")
+            if challenge.status != "pending" or ensure_aware_utc(
+                challenge.expires_at
+            ) <= datetime.now(UTC):
+                raise HostedToolError("challenge_expired", "Confirmation challenge is not pending")
+            if (
+                challenge.actor_id != actor_id
+                or challenge.client_id != client_id
+                or challenge.environment != environment
+                or challenge.company_party_id != company_party_id
+                or challenge.operation_type != operation_type
+                or challenge.resource_type != resource_type
+                or challenge.required_scope != required_scope
+            ):
+                raise HostedToolError("challenge_mismatch", "Challenge invariants do not match")
             session.expunge(challenge)
             return challenge
 
@@ -266,7 +455,7 @@ class HostedToolRuntime:
         operation_type: str,
         idempotency_key: str,
         operation_hash: str,
-    ) -> None:
+    ) -> IdempotencyRecord:
         """Record a local idempotency key if one is provided."""
 
         async with self.database.session() as session:
@@ -283,16 +472,44 @@ class HostedToolRuntime:
                     "idempotency_conflict",
                     "Idempotency key was already used for a different operation",
                 )
-            if existing is None:
-                session.add(
-                    IdempotencyRecord(
-                        connection_id=connection_id,
-                        company_party_id=company_party_id,
-                        operation_type=operation_type,
-                        idempotency_key_hash=sha256_text(idempotency_key),
-                        operation_hash=operation_hash,
-                    )
-                )
+            if existing is not None:
+                session.expunge(existing)
+                return existing
+            record = IdempotencyRecord(
+                connection_id=connection_id,
+                company_party_id=company_party_id,
+                operation_type=operation_type,
+                idempotency_key_hash=sha256_text(idempotency_key),
+                operation_hash=operation_hash,
+            )
+            session.add(record)
+            await session.flush()
+            session.expunge(record)
+            return record
+
+    async def record_idempotency_outcome(
+        self,
+        *,
+        idempotency_id: str,
+        status: str,
+        billit_resource_type: str | None = None,
+        billit_resource_id: str | None = None,
+        billit_error_code: str | None = None,
+    ) -> None:
+        """Persist the final state of a hosted idempotent operation."""
+
+        allowed = {"started", "succeeded", "failed", "conflict", "unknown_side_effect"}
+        if status not in allowed:
+            raise ValueError(f"Unsupported idempotency status: {status}")
+        async with self.database.session() as session:
+            record = await session.get(IdempotencyRecord, idempotency_id, with_for_update=True)
+            if record is None:
+                return
+            record.status = status
+            record.billit_resource_type = billit_resource_type
+            record.billit_resource_id = billit_resource_id
+            record.billit_error_code = billit_error_code
+            record.updated_at = datetime.now(UTC)
 
     async def audit(
         self,
@@ -309,6 +526,8 @@ class HostedToolRuntime:
         tool_name: str | None = None,
         summary: dict[str, Any] | None = None,
         error_code: str | None = None,
+        latency_ms: int | None = None,
+        billit_request_id: str | None = None,
     ) -> None:
         """Record a redacted audit event."""
 
@@ -328,8 +547,76 @@ class HostedToolRuntime:
                     outcome=outcome,
                     error_code=error_code,
                     correlation_id=correlation_id,
+                    billit_request_id=billit_request_id,
+                    latency_ms=latency_ms,
                 )
             )
+
+
+class AuditedBillitClient:
+    """Hosted Billit API client wrapper that records redacted outbound audit."""
+
+    def __init__(
+        self,
+        *,
+        client: BillitAPIClient,
+        runtime: HostedToolRuntime,
+        actor_id: str,
+        client_id: str | None,
+        connection_id: str,
+        environment: str,
+        company_party_id: int,
+        correlation_id: str,
+        tool_name: str | None,
+    ) -> None:
+        self._client = client
+        self._runtime = runtime
+        self._actor_id = actor_id
+        self._client_id = client_id
+        self._connection_id = connection_id
+        self._environment = environment
+        self._company_party_id = company_party_id
+        self._correlation_id = correlation_id
+        self._tool_name = tool_name
+
+    async def request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        """Proxy a Billit request and audit only method/path/status metadata."""
+
+        started = perf_counter()
+        outcome = "success"
+        error_code: str | None = None
+        try:
+            response = await self._client.request(method, path, **kwargs)
+            if not response.get("success", False):
+                outcome = "failure"
+                error_code = str(response.get("error_code") or "BILLIT_API_ERROR")
+            return response
+        except Exception:
+            outcome = "failure"
+            error_code = "BILLIT_API_EXCEPTION"
+            raise
+        finally:
+            with suppress(Exception):
+                await self._runtime.audit(
+                    actor_id=self._actor_id,
+                    client_id=self._client_id,
+                    connection_id=self._connection_id,
+                    environment=self._environment,
+                    company_party_id=self._company_party_id,
+                    event_type="billit_api_call",
+                    operation_class="external_api",
+                    outcome=outcome,
+                    correlation_id=self._correlation_id,
+                    tool_name=self._tool_name,
+                    summary={"method": method.upper(), "path": path},
+                    error_code=error_code,
+                    latency_ms=int((perf_counter() - started) * 1000),
+                )
+
+    async def close(self) -> None:
+        """Close the underlying Billit API client."""
+
+        await self._client.close()
 
 
 def success(data: Any) -> dict[str, Any]:

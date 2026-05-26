@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -11,9 +11,16 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from billit_mcp.auth.billit_oauth import BillitOAuthBridge, new_billit_state
 from billit_mcp.auth.oauth_service import MCPJWTVerifier, MCPOAuthService, OAuthError
-from billit_mcp.auth.security import FernetCipher, JWTService, sha256_text
+from billit_mcp.auth.security import (
+    FernetCipher,
+    JWTService,
+    ensure_aware_utc,
+    random_token_urlsafe,
+    sha256_text,
+)
 from billit_mcp.hosted_config import DEFAULT_SCOPES, HostedSettings
 from billit_mcp.persistence.database import HostedDatabase
+from billit_mcp.persistence.migrations import HOSTED_ALEMBIC_HEAD
 from billit_mcp.persistence.models import OAuthAuthorizationTransaction
 from billit_mcp.registry import create_hosted_mcp
 from billit_mcp.services.hosted_runtime import HostedToolRuntime
@@ -40,11 +47,19 @@ def create_app() -> FastAPI:
     )
     mcp = create_hosted_mcp(runtime, verifier)
     streamable_app = mcp.streamable_http_app()
+    startup_seed_error: str | None = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        await database.create_all()
-        await oauth_service.seed_static_clients()
+        nonlocal startup_seed_error
+        try:
+            revision = await database.alembic_revision()
+            if revision == HOSTED_ALEMBIC_HEAD:
+                await oauth_service.seed_static_clients()
+            else:
+                startup_seed_error = f"database revision is {revision!r}, expected head"
+        except Exception as exc:  # readiness reports the concrete failure.
+            startup_seed_error = str(exc)
         async with streamable_app.router.lifespan_context(streamable_app):
             yield
         await database.close()
@@ -57,12 +72,35 @@ def create_app() -> FastAPI:
     app.state.hosted_jwt_service = jwt_service
     app.state.hosted_mcp = mcp
 
+    async def audit_auth(
+        event_type: str,
+        outcome: str,
+        *,
+        actor_id: str | None = None,
+        client_id: str | None = None,
+        environment: str | None = None,
+        error_code: str | None = None,
+        summary: dict[str, Any] | None = None,
+    ) -> None:
+        with suppress(Exception):
+            await runtime.audit(
+                actor_id=actor_id,
+                client_id=client_id,
+                event_type=event_type,
+                operation_class="auth",
+                outcome=outcome,
+                correlation_id=random_token_urlsafe(),
+                environment=environment,
+                summary=summary,
+                error_code=error_code,
+            )
+
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/readyz")
-    async def readyz() -> dict[str, Any]:
+    async def readyz() -> JSONResponse:
         configured_billit = {
             "sandbox": bool(
                 settings.billit_sandbox_client_id and settings.billit_sandbox_client_secret
@@ -71,13 +109,29 @@ def create_app() -> FastAPI:
                 settings.billit_production_client_id and settings.billit_production_client_secret
             ),
         }
-        return {
-            "status": "ok",
-            "database": "configured",
+        db_connected = False
+        revision: str | None = None
+        readiness_error: str | None = startup_seed_error
+        try:
+            await database.ping()
+            db_connected = True
+            revision = await database.alembic_revision()
+        except Exception as exc:
+            readiness_error = str(exc)
+        ready = db_connected and revision == HOSTED_ALEMBIC_HEAD and startup_seed_error is None
+        payload = {
+            "status": "ok" if ready else "unready",
+            "database": {
+                "connected": db_connected,
+                "alembic_revision": revision,
+                "expected_revision": HOSTED_ALEMBIC_HEAD,
+            },
             "resource": settings.resource_url,
             "issuer": settings.issuer_url,
             "billit_oauth": configured_billit,
+            "error": readiness_error if not ready else None,
         }
+        return JSONResponse(payload, status_code=200 if ready else 503)
 
     @app.get("/.well-known/oauth-protected-resource")
     async def protected_resource_metadata() -> dict[str, Any]:
@@ -125,8 +179,21 @@ def create_app() -> FastAPI:
                 actor_subject=actor_subject,
                 environment=query.get("environment", "sandbox"),
             )
+            await audit_auth(
+                "mcp_oauth_authorize",
+                "success",
+                client_id=query.get("client_id"),
+                environment=query.get("environment", "sandbox"),
+            )
             return RedirectResponse(redirect_to)
         except OAuthError as exc:
+            await audit_auth(
+                "mcp_oauth_authorize",
+                "denied",
+                client_id=query.get("client_id"),
+                environment=query.get("environment", "sandbox"),
+                error_code=exc.error,
+            )
             return JSONResponse(
                 {"error": exc.error, "error_description": exc.description},
                 status_code=400,
@@ -145,8 +212,21 @@ def create_app() -> FastAPI:
                 code=_required(data.get("code"), "code"),
                 code_verifier=_required(data.get("code_verifier"), "code_verifier"),
             )
+            claims = jwt_service.decode(str(token["access_token"]))
+            await audit_auth(
+                "mcp_oauth_token",
+                "success",
+                actor_id=str(claims.get("sub")),
+                client_id=str(claims.get("client_id")),
+            )
             return JSONResponse(token)
         except OAuthError as exc:
+            await audit_auth(
+                "mcp_oauth_token",
+                "denied",
+                client_id=data.get("client_id"),
+                error_code=exc.error,
+            )
             return JSONResponse(
                 {"error": exc.error, "error_description": exc.description},
                 status_code=400 if exc.error != "invalid_client" else 401,
@@ -158,6 +238,7 @@ def create_app() -> FastAPI:
         token = data.get("token")
         if token:
             await oauth_service.revoke_token(str(token))
+            await audit_auth("mcp_oauth_revoke", "success")
         return JSONResponse({})
 
     @app.get("/billit/connect")
@@ -182,10 +263,22 @@ def create_app() -> FastAPI:
                     expires_at=datetime.now(UTC) + timedelta(minutes=10),
                 )
                 session.add(transaction)
+            await audit_auth(
+                "billit_oauth_connect",
+                "success",
+                actor_id=actor_id,
+                environment=environment,
+            )
             return RedirectResponse(
                 billit_bridge.authorization_url(environment=environment, state=state)
             )
         except Exception as exc:
+            await audit_auth(
+                "billit_oauth_connect",
+                "failure",
+                environment=environment,
+                error_code="BILLIT_CONNECT_FAILED",
+            )
             return JSONResponse(
                 {"error": "billit_connect_failed", "message": str(exc)}, status_code=400
             )
@@ -197,6 +290,7 @@ def create_app() -> FastAPI:
         error: str | None = None,
     ) -> Any:
         if error:
+            await audit_auth("billit_oauth_callback", "denied", error_code=str(error))
             return JSONResponse({"status": "access_denied", "error": error}, status_code=400)
         if not code or not state:
             return JSONResponse({"error": "missing_code_or_state"}, status_code=400)
@@ -210,7 +304,11 @@ def create_app() -> FastAPI:
                 )
             )
             if transaction is None or transaction.actor_id is None:
+                await audit_auth("billit_oauth_callback", "denied", error_code="invalid_state")
                 return JSONResponse({"error": "invalid_state"}, status_code=400)
+            if ensure_aware_utc(transaction.expires_at) <= datetime.now(UTC):
+                await audit_auth("billit_oauth_callback", "denied", error_code="expired_state")
+                return JSONResponse({"error": "expired_state"}, status_code=400)
             actor_id = transaction.actor_id
             environment = transaction.environment
             transaction.status = "billit_callback_received"
@@ -220,8 +318,21 @@ def create_app() -> FastAPI:
                 environment=environment,
                 code=code,
             )
+            await audit_auth(
+                "billit_oauth_callback",
+                "success",
+                actor_id=actor_id,
+                environment=environment,
+            )
             return JSONResponse({"status": "connected", "connection_id": connection_id})
         except Exception as exc:
+            await audit_auth(
+                "billit_oauth_callback",
+                "failure",
+                actor_id=actor_id,
+                environment=environment,
+                error_code="BILLIT_TOKEN_EXCHANGE_FAILED",
+            )
             return JSONResponse(
                 {"error": "billit_token_exchange_failed", "message": str(exc)}, status_code=400
             )

@@ -94,11 +94,17 @@ class BillitOAuthBridge:
                 )
             )
             if connection is None:
-                connection = BillitConnection(actor_id=actor_id, environment=environment)
+                connection = BillitConnection(
+                    actor_id=actor_id,
+                    environment=environment,
+                    status="pending_company_sync",
+                )
                 session.add(connection)
                 await session.flush()
-            connection.status = "active"
-            connection.connected_at = datetime.now(UTC)
+            else:
+                connection.status = "pending_company_sync"
+                connection.connected_at = None
+                connection.reauthorization_required_at = None
             grant = await session.get(BillitOAuthGrant, connection.connection_id)
             if grant is None:
                 grant = BillitOAuthGrant(
@@ -118,15 +124,33 @@ class BillitOAuthBridge:
                 grant.access_token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
                 grant.refresh_token_version += 1
             connection_id = connection.connection_id
-        account_information = await self.fetch_account_information(
-            environment=environment,
-            access_token=access_token,
-        )
-        await self.sync_companies_from_items(
-            connection_id=connection_id,
-            environment=environment,
-            companies=_account_information_items(account_information),
-        )
+        try:
+            account_information = await self.fetch_account_information(
+                environment=environment,
+                access_token=access_token,
+            )
+            company_count = await self.sync_companies_from_items(
+                connection_id=connection_id,
+                environment=environment,
+                companies=_account_information_items(account_information),
+            )
+            if company_count < 1:
+                raise RuntimeError("Billit accountInformation returned no authorized companies")
+        except Exception:
+            async with self.database.session() as session:
+                connection = await session.get(
+                    BillitConnection, connection_id, with_for_update=True
+                )
+                if connection is not None:
+                    connection.status = "company_sync_failed"
+                    connection.connected_at = None
+            raise
+        async with self.database.session() as session:
+            connection = await session.get(BillitConnection, connection_id, with_for_update=True)
+            if connection is None:
+                raise RuntimeError("Billit connection disappeared during company sync")
+            connection.status = "active"
+            connection.connected_at = datetime.now(UTC)
         return connection_id
 
     async def fetch_account_information(
@@ -214,14 +238,16 @@ class BillitOAuthBridge:
         connection_id: str,
         environment: str,
         companies: list[dict[str, Any]],
-    ) -> None:
+    ) -> int:
         """Sync authorized Billit companies from sanitized account data."""
 
+        seen_party_ids: set[int] = set()
         async with self.database.session() as session:
             for item in companies:
                 party_id = _extract_party_id(item)
                 if party_id is None:
                     continue
+                seen_party_ids.add(party_id)
                 existing = await session.scalar(
                     select(BillitCompany).where(
                         BillitCompany.connection_id == connection_id,
@@ -243,6 +269,20 @@ class BillitOAuthBridge:
                 else:
                     existing.active = True
                     existing.last_seen_at = datetime.now(UTC)
+            existing_companies = (
+                await session.scalars(
+                    select(BillitCompany).where(
+                        BillitCompany.connection_id == connection_id,
+                        BillitCompany.environment == environment,
+                        BillitCompany.active.is_(True),
+                    )
+                )
+            ).all()
+            for company in existing_companies:
+                if company.company_party_id not in seen_party_ids:
+                    company.active = False
+                    company.last_seen_at = datetime.now(UTC)
+        return len(seen_party_ids)
 
 
 def new_billit_state() -> str:
@@ -252,7 +292,7 @@ def new_billit_state() -> str:
 
 
 def _extract_party_id(item: dict[str, Any]) -> int | None:
-    for key in ("PartyID", "CompanyID", "ID", "party_id"):
+    for key in ("PartyID", "CompanyPartyID", "CompanyID", "ID", "party_id", "company_party_id"):
         value = item.get(key)
         if value is None:
             continue
