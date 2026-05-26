@@ -119,6 +119,8 @@ def build_send_summary(
         "customer_vat": customer.get("VATNumber"),
         "amount_including_vat": data.get("TotalIncl") or data.get("TotalInclVAT"),
         "currency": data.get("Currency") or "EUR",
+        "is_sent": bool(data.get("IsSent")),
+        "order_status": data.get("OrderStatus"),
         "transport_type": transport_type,
         "strict_transport": strict_transport,
         "fallback_allowed": not strict_transport,

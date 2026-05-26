@@ -19,6 +19,11 @@ DIRECTION_MAP = {
     "cost": "Cost",
 }
 
+PARTY_ROLE_MAP = {
+    "customer": "Customer",
+    "supplier": "Supplier",
+}
+
 
 def compile_order_params(
     *,
@@ -56,9 +61,37 @@ def compile_order_params(
     return list_params(skip=0, top=top, odata_filter=" and ".join(filters) if filters else None)
 
 
+def compile_party_params(
+    *,
+    role: str,
+    name: str | None = None,
+    vat_number: str | None = None,
+    email: str | None = None,
+    external_provider_id: str | None = None,
+    limit: int = 5,
+) -> dict[str, object]:
+    """Compile safe hosted party-resolution parameters."""
+
+    resolved_role = PARTY_ROLE_MAP.get(role)
+    if resolved_role is None:
+        raise ValueError("Unsupported role: expected customer or supplier")
+    filters = [f"PartyType eq '{resolved_role}'"]
+    if external_provider_id:
+        filters.append(f"ExternalProviderID eq '{_odata_string(external_provider_id)}'")
+    elif vat_number:
+        filters.append(f"VATNumber eq '{_odata_string(vat_number)}'")
+    elif email:
+        filters.append(f"Email eq '{_odata_string(email)}'")
+    elif name:
+        filters.append(f"contains(Name,'{_odata_string(name)}')")
+    top = max(1, min(limit, 20))
+    return list_params(skip=0, top=top, odata_filter=" and ".join(filters))
+
+
 def _odata_string(value: str) -> str:
     """Escape a user-provided OData string literal."""
 
-    if "$" in value or ";" in value:
+    lowered = value.lower()
+    if "$" in value or ";" in value or " and " in lowered or " or " in lowered:
         raise ValueError("Unsupported characters in filter value")
     return value.replace("'", "''")

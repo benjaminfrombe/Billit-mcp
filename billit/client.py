@@ -130,7 +130,7 @@ class BillitAPIClient:
         """Build Billit headers for API-key or OAuth authentication."""
 
         headers = {
-            "partyID": settings.party_id,
+            "PartyID": settings.party_id,
             "Accept": "application/json",
         }
         if isinstance(settings, BillitOAuthSettings):
