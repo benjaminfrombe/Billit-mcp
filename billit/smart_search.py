@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Any
 
-from billit.endpoints import MAX_PAGE_SIZE
+from billit.endpoints import MAX_PAGE_SIZE, list_params
 
 if TYPE_CHECKING:
     from billit.protocols import BillitRequester
@@ -154,7 +154,9 @@ async def run_smart_search(
     results: list[dict[str, Any]] = []
 
     if entity_type in {"orders", "all"}:
-        orders_resp = await client.request("GET", "/orders", params={"$top": MAX_PAGE_SIZE})
+        orders_resp = await client.request(
+            "GET", "/orders", params=list_params(skip=None, top=MAX_PAGE_SIZE)
+        )
         if not orders_resp.get("success"):
             return orders_resp
         for order in normalize_items(orders_resp.get("data")):
@@ -165,7 +167,9 @@ async def run_smart_search(
                 )
 
     if entity_type in {"parties", "all"}:
-        parties_resp = await client.request("GET", "/parties", params={"$top": MAX_PAGE_SIZE})
+        parties_resp = await client.request(
+            "GET", "/parties", params=list_params(skip=None, top=MAX_PAGE_SIZE)
+        )
         if not parties_resp.get("success"):
             return parties_resp
         for party in normalize_items(parties_resp.get("data")):
@@ -176,7 +180,9 @@ async def run_smart_search(
                 )
 
     if entity_type in {"products", "all"}:
-        products_resp = await client.request("GET", "/products", params={"$top": MAX_PAGE_SIZE})
+        products_resp = await client.request(
+            "GET", "/products", params=list_params(skip=None, top=MAX_PAGE_SIZE)
+        )
         if not products_resp.get("success"):
             return products_resp
         for product in normalize_items(products_resp.get("data")):

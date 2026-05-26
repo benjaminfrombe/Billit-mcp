@@ -36,25 +36,24 @@ Ruff uses the repository's Motium-style selector set in `pyproject.toml`.
 Keep documentation examples readable, but do not weaken lint config for test
 or implementation shortcuts.
 
-## Billit MCP Live Integration Tests
+## Billit MCP Live Canary Test
 
-Live tests are read-oriented checks against a real Billit account:
+The live pytest path is a thin wrapper around the local read-only canary:
 
 ```bash
 uv run pytest tests/test_live_integration.py -q --live
 ```
 
-Use sandbox credentials by default:
+Use sandbox credentials by default. Prefer canary-specific sandbox variables:
 
 ```env
-BILLIT_API_KEY=your-sandbox-api-key
-BILLIT_BASE_URL=https://api.sandbox.billit.be/v1
-BILLIT_PARTY_ID=your-sandbox-party-id
+BILLIT_SANDBOX_API_KEY_K4K=your-sandbox-api-key
+BILLIT_SANDBOX_PARTY_ID=your-sandbox-party-id
 ```
 
 Do not run live tests against production unless you have intentionally selected
-production credentials and understand the side effects. Even read-heavy tests
-can reveal sensitive accounting data in logs or terminal scrollback.
+production credentials and understand the side effects. The current canary has
+no write probes and records only sanitized status/count evidence.
 
 ## Billit MCP Test Authoring Pattern
 
@@ -83,7 +82,7 @@ For direct client tests, set `BILLIT_API_KEY`, `BILLIT_BASE_URL`, and
 - Keep ordinary tests credential-free.
 - Use standard response envelopes in mocks.
 - Assert the exact Billit endpoint path when a route proxies the API.
-- Keep live tests read-only unless a test is explicitly isolated, named, and
-  documented as a write test.
+- Keep live tests on the shared canary runner; do not add ad hoc live probes
+  that bypass its read-only guard.
 - Avoid putting real customer names, invoice IDs, or API payloads into expected
   values.

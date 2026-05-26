@@ -94,14 +94,15 @@ read-only, sandbox-first, refused in CI, and writes sanitized status/count
 evidence under `.local/billit-live-canary/`.
 
 ```bash
-BILLIT_API_KEY="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
-BILLIT_BASE_URL=https://api.sandbox.billit.be/v1 \
+BILLIT_SANDBOX_API_KEY_K4K="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
 BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
 uv run python scripts/local/live_billit_canary.py --read-only
 ```
 
 Do not commit `.local/` canary evidence. The report intentionally excludes API
 keys, customer names, emails, invoice bodies, and raw Billit response payloads.
+The canary refuses non-GET probes unless `BILLIT_LIVE_CANARY_ALLOW_WRITES=1`,
+and no write probes are registered in the current canary.
 
 ## Billit MCP Troubleshooting Startup Failures
 

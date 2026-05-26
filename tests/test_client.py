@@ -4,7 +4,7 @@ import pytest
 import respx
 from httpx import Response
 
-from billit.client import BillitAPIClient, RateLimiter
+from billit.client import BillitAPIClient, BillitSettings, RateLimiter
 
 pytestmark = pytest.mark.allow_billit_request
 
@@ -124,3 +124,33 @@ async def test_successful_request(monkeypatch):
         assert result["success"] is True
         assert result["data"] == {"data": "test"}
         assert result["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_settings_do_not_require_env(monkeypatch):
+    """Explicit client settings bypass env-derived Billit configuration."""
+
+    monkeypatch.delenv("BILLIT_API_KEY", raising=False)
+    monkeypatch.delenv("BILLIT_BASE_URL", raising=False)
+    monkeypatch.delenv("BILLIT_PARTY_ID", raising=False)
+
+    client = BillitAPIClient(
+        BillitSettings(
+            base_url="https://api.billit.be/v1",
+            api_key="explicit-key",
+            party_id="67890",
+            rate_limit_per_minute=100000,
+        )
+    )
+
+    with respx.mock:
+        route = respx.get("https://api.billit.be/v1/test").mock(
+            return_value=Response(200, json={"ok": True})
+        )
+
+        result = await client.request("GET", "/test")
+
+    await client.close()
+    assert result["success"] is True
+    assert route.calls.last.request.headers["apiKey"] == "explicit-key"
+    assert route.calls.last.request.headers["partyID"] == "67890"

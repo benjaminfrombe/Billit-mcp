@@ -42,6 +42,28 @@ async def test_list_orders(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_list_orders_clamps_page_size(monkeypatch):
+    """FastAPI list routes cap unsupported Billit page sizes."""
+
+    async def fake_request(method, url, **kwargs):
+        assert method == "GET"
+        assert url == "/orders"
+        assert kwargs["params"] == {"$skip": 0, "$top": 120}
+        return {"success": True, "data": [], "error": None, "error_code": None}
+
+    monkeypatch.setattr(
+        "billit.client.BillitAPIClient.request",
+        lambda self, method, url, **kwargs: fake_request(method, url, **kwargs),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/orders?skip=-5&top=500")
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+
+@pytest.mark.asyncio
 async def test_create_order(monkeypatch):
     """Test creating a new order."""
     order_data = {

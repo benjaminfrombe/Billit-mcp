@@ -62,6 +62,14 @@ BILLIT_BASE_URL=https://api.sandbox.billit.be/v1
 BILLIT_PARTY_ID=your-sandbox-party-id
 ```
 
+For the local live canary, prefer sandbox-specific variables so production
+credentials are not selected accidentally:
+
+```env
+BILLIT_SANDBOX_API_KEY_K4K=your-sandbox-api-key
+BILLIT_SANDBOX_PARTY_ID=your-sandbox-party-id
+```
+
 Do not use production `BILLIT_PARTY_ID` with sandbox keys or sandbox base URLs.
 Credential/base-url mismatches usually produce authentication or not-found
 errors that look like application bugs.

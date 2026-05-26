@@ -2,13 +2,13 @@
 
 from collections.abc import AsyncIterator
 
-from .client import BillitAPIClient
+from .client import BillitAPIClient, BillitSettings
 
 
-def build_client() -> BillitAPIClient:
+def build_client(settings: BillitSettings | None = None) -> BillitAPIClient:
     """Return a configured Billit API client."""
 
-    return BillitAPIClient()
+    return BillitAPIClient(settings)
 
 
 async def get_client() -> AsyncIterator[BillitAPIClient]:

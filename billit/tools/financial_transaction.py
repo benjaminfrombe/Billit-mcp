@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, UploadFile
 
 from ..client import BillitAPIClient
 from ..dependencies import get_client
-from ..endpoints import FINANCIAL_TRANSACTIONS_ENDPOINT
+from ..endpoints import FINANCIAL_TRANSACTIONS_ENDPOINT, list_params
 
 router = APIRouter()
 
@@ -19,9 +19,7 @@ async def list_financial_transactions(
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Retrieve bank transactions."""
-    params: dict[str, Any] = {"$skip": skip, "$top": top}
-    if odata_filter:
-        params["$filter"] = odata_filter
+    params = list_params(skip=skip, top=top, odata_filter=odata_filter)
     return await client.request("GET", FINANCIAL_TRANSACTIONS_ENDPOINT, params=params)
 
 

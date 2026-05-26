@@ -9,7 +9,7 @@ from mcp.server.fastmcp import FastMCP
 
 from billit.client import BillitAPIClient
 from billit.dependencies import build_client
-from billit.endpoints import FINANCIAL_TRANSACTIONS_ENDPOINT, report_endpoint
+from billit.endpoints import FINANCIAL_TRANSACTIONS_ENDPOINT, list_params, report_endpoint
 from billit.services import ai_composite
 from billit.smart_search import run_smart_search
 
@@ -66,9 +66,12 @@ async def list_parties(
         top: Maximum number of records to return (max 120)
     """
     client = await get_client()
-    params: dict[str, Any] = {"PartyType": party_type, "$skip": skip, "$top": top}
-    if odata_filter:
-        params["$filter"] = odata_filter
+    params = list_params(
+        skip=skip,
+        top=top,
+        odata_filter=odata_filter,
+        extra={"PartyType": party_type},
+    )
 
     return await client.request("GET", "/parties", params=params)
 
@@ -120,9 +123,7 @@ async def list_products(
         top: Maximum number of records to return (max 120)
     """
     client = await get_client()
-    params: dict[str, Any] = {"$skip": skip, "$top": top}
-    if odata_filter:
-        params["$filter"] = odata_filter
+    params = list_params(skip=skip, top=top, odata_filter=odata_filter)
 
     return await client.request("GET", "/products", params=params)
 
@@ -162,9 +163,7 @@ async def list_orders(
         top: Maximum number of records to return (max 120)
     """
     client = await get_client()
-    params: dict[str, Any] = {"$skip": skip, "$top": top}
-    if odata_filter:
-        params["$filter"] = odata_filter
+    params = list_params(skip=skip, top=top, odata_filter=odata_filter)
 
     return await client.request("GET", "/orders", params=params)
 
@@ -312,9 +311,7 @@ async def list_financial_transactions(
         top: Maximum number of records to return (max 120)
     """
     client = await get_client()
-    params: dict[str, Any] = {"$skip": skip, "$top": top}
-    if odata_filter:
-        params["$filter"] = odata_filter
+    params = list_params(skip=skip, top=top, odata_filter=odata_filter)
 
     return await client.request("GET", FINANCIAL_TRANSACTIONS_ENDPOINT, params=params)
 
@@ -397,9 +394,7 @@ async def list_documents(
         top: Maximum number of records to return (max 120)
     """
     client = await get_client()
-    params: dict[str, Any] = {"$skip": skip, "$top": top}
-    if odata_filter:
-        params["$filter"] = odata_filter
+    params = list_params(skip=skip, top=top, odata_filter=odata_filter)
 
     return await client.request("GET", "/documents", params=params)
 

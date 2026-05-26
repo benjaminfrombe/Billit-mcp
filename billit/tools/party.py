@@ -6,16 +6,28 @@ from fastapi import APIRouter, Depends
 
 from ..client import BillitAPIClient
 from ..dependencies import get_client
+from ..endpoints import list_params
 from ..models.party import PartyCreate, PartyUpdate
 
 router = APIRouter()
 
 
 @router.get("/parties")
-async def list_parties(client: BillitAPIClient = Depends(get_client)) -> dict[str, Any]:
+async def list_parties(
+    party_type: str | None = None,
+    odata_filter: str | None = None,
+    skip: int = 0,
+    top: int = 120,
+    client: BillitAPIClient = Depends(get_client),
+) -> dict[str, Any]:
     """Retrieve a list of parties."""
 
-    return await client.request("GET", "/parties")
+    extra = {"PartyType": party_type} if party_type else None
+    return await client.request(
+        "GET",
+        "/parties",
+        params=list_params(skip=skip, top=top, odata_filter=odata_filter, extra=extra),
+    )
 
 
 @router.post("/parties")

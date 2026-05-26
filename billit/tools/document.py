@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile
 
 from ..client import BillitAPIClient
 from ..dependencies import get_client
+from ..endpoints import list_params
 
 router = APIRouter()
 
@@ -19,9 +20,7 @@ async def list_documents(
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
     """List documents."""
-    params: dict[str, Any] = {"$skip": skip, "$top": top}
-    if odata_filter:
-        params["$filter"] = odata_filter
+    params = list_params(skip=skip, top=top, odata_filter=odata_filter)
     return await client.request("GET", "/documents", params=params)
 
 

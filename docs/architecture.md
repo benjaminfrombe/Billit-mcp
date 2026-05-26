@@ -65,6 +65,11 @@ The client uses a process-wide token bucket rate limiter. This prevents each
 request-scoped FastAPI client from resetting its own bucket and accidentally
 overrunning Billit API limits.
 
+`BillitAPIClient` can be configured from environment variables or from explicit
+`BillitSettings`. Runtime adapters keep the env-derived default; local canaries
+use explicit settings so sandbox credentials can be selected without mutating
+process environment.
+
 FastAPI routes receive a request-scoped client through `billit/dependencies.py`
 and close its underlying `httpx.AsyncClient` after each request. MCP tools use
 one process-scoped client from `src/billit_mcp/server.py` and close it through
@@ -76,6 +81,9 @@ the FastMCP lifespan hook.
 products. It fetches up to 120 records from the selected entity type, parses
 amounts, dates, and content keywords from the user query, scores matches with
 keyword checks and `SequenceMatcher`, then returns ranked results.
+
+List-style Billit calls build pagination parameters through one shared helper,
+which clamps `$top` to 120 before requests reach the Billit API.
 
 The helper is used by both `GET /ai/smart-search` in the FastAPI adapter and
 the `smart_search` / `debug_smart_search` MCP tools. Other composite helpers

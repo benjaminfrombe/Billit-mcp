@@ -68,23 +68,26 @@ Unit and route tests are the default. Normal pytest sets fake Billit env vars
 and fails any unmocked `BillitAPIClient.request` call. Tests must monkeypatch
 the client request method, use `respx`, or be marked live.
 
-Live tests are skipped unless `--live` is passed. They require real Billit
-credentials and should normally use sandbox.
+Live tests are skipped unless `--live` is passed. The live pytest path now wraps
+the same read-only sandbox canary used for local endpoint drift evidence.
 
 ```bash
 uv run pytest tests/test_live_integration.py -q --live
 ```
 
-The local live-data canary is separate from pytest and CI. It defaults to
-sandbox, reads the sandbox key from env or macOS Keychain, performs read-only
-probes, and writes sanitized evidence under `.local/`:
+The local live-data canary is separate from CI. It defaults to sandbox, reads
+the sandbox key from env or macOS Keychain, performs read-only probes, and
+writes sanitized evidence under `.local/`:
 
 ```bash
-BILLIT_API_KEY="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
-BILLIT_BASE_URL=https://api.sandbox.billit.be/v1 \
+BILLIT_SANDBOX_API_KEY_K4K="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
 BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
 uv run python scripts/local/live_billit_canary.py --read-only
 ```
+
+For sandbox runs, credential precedence is
+`BILLIT_SANDBOX_API_KEY_K4K`, `BILLIT_SANDBOX_API_KEY`, macOS Keychain service
+`BILLIT_SANDBOX_API_KEY_K4K`, then `BILLIT_API_KEY` as a compatibility fallback.
 
 ## Billit MCP Documentation Updates
 

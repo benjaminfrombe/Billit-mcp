@@ -27,6 +27,30 @@ def get_env(name: str, default: str | None = None) -> str:
 
 
 @dataclass
+class BillitSettings:
+    """Explicit Billit API configuration for clients that should not mutate env."""
+
+    base_url: str
+    api_key: str
+    party_id: str
+    context_party_id: str | None = None
+    rate_limit_per_minute: int | None = None
+
+    @classmethod
+    def from_env(cls) -> BillitSettings:
+        """Build settings from the process environment."""
+
+        rate_limit = os.getenv("RATE_LIMIT_PER_MINUTE")
+        return cls(
+            base_url=get_env("BILLIT_BASE_URL"),
+            api_key=get_env("BILLIT_API_KEY"),
+            party_id=get_env("BILLIT_PARTY_ID"),
+            context_party_id=os.getenv("BILLIT_CONTEXT_PARTY_ID"),
+            rate_limit_per_minute=int(rate_limit) if rate_limit else None,
+        )
+
+
+@dataclass
 class RateLimiter:
     """Simple token bucket rate limiter for outgoing requests."""
 
@@ -60,27 +84,28 @@ class RateLimiter:
             self._last_refill = now
 
 
-def get_rate_limiter() -> RateLimiter:
+def get_rate_limiter(rate: int | None = None) -> RateLimiter:
     """Return the process-wide Billit API rate limiter."""
 
     global _rate_limiter
-    rate = int(os.getenv("RATE_LIMIT_PER_MINUTE", "50"))
-    if _rate_limiter is None or _rate_limiter.rate_per_minute != rate:
-        _rate_limiter = RateLimiter(rate)
+    resolved_rate = rate or int(os.getenv("RATE_LIMIT_PER_MINUTE", "50"))
+    if _rate_limiter is None or _rate_limiter.rate_per_minute != resolved_rate:
+        _rate_limiter = RateLimiter(resolved_rate)
     return _rate_limiter
 
 
 class BillitAPIClient:
     """Thin wrapper around ``httpx.AsyncClient`` with rate limiting and response handling."""
 
-    def __init__(self) -> None:
+    def __init__(self, settings: BillitSettings | None = None) -> None:
         """Initialize the client using environment variables for configuration."""
 
-        self.base_url = get_env("BILLIT_BASE_URL")
-        self.api_key = get_env("BILLIT_API_KEY")
-        self.party_id = get_env("BILLIT_PARTY_ID")
-        self.context_party_id = os.getenv("BILLIT_CONTEXT_PARTY_ID")  # Optional for accountants
-        self.rate_limiter = get_rate_limiter()
+        self.settings = settings or BillitSettings.from_env()
+        self.base_url = self.settings.base_url
+        self.api_key = self.settings.api_key
+        self.party_id = self.settings.party_id
+        self.context_party_id = self.settings.context_party_id
+        self.rate_limiter = get_rate_limiter(self.settings.rate_limit_per_minute)
 
         # Set up headers with correct case
         headers = {

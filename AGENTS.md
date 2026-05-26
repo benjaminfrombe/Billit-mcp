@@ -46,6 +46,9 @@ Run live tests only when credentials and environment are intentionally selected:
 uv run pytest tests/test_live_integration.py -q --live
 ```
 
+That live pytest path is a wrapper around the local read-only canary. Do not add
+separate ad hoc live probes that bypass `scripts/local/live_billit_canary.py`.
+
 ## Olivier Drafting Voice
 
 When drafting or rewriting anything meant to be sent as Olivier, use the

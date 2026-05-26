@@ -1,8 +1,43 @@
 """Tests for AI composite tools."""
 
+from typing import Any
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from server import app
+
+from billit.services import ai_composite
+
+
+class RecordingClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+        self.calls += 1
+        return {"success": True, "data": [], "error": None, "error_code": None}
+
+
+def test_period_bounds_accepts_only_year_or_month() -> None:
+    assert ai_composite.period_bounds("2024") == ("2024-01-01", "2025-01-01")
+    assert ai_composite.period_bounds("2024-01") == ("2024-01-01", "2024-02-01")
+    assert ai_composite.period_bounds("2024-Q1") is None
+    assert ai_composite.period_bounds("last_30_days") is None
+
+
+@pytest.mark.asyncio
+async def test_cashflow_rejects_invalid_period_without_request() -> None:
+    client = RecordingClient()
+
+    result = await ai_composite.get_cashflow_overview(client, "last_30_days")
+
+    assert result == {
+        "success": False,
+        "data": None,
+        "error": "Unsupported period 'last_30_days'. Use YYYY or YYYY-MM.",
+        "error_code": "INVALID_PERIOD",
+    }
+    assert client.calls == 0
 
 
 @pytest.mark.asyncio

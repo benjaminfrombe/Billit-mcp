@@ -149,7 +149,7 @@ uv run python -m billit_mcp
 uv run uvicorn server:app --reload
 ```
 
-Run live integration tests only with safe credentials:
+Run the read-only live canary test only with safe sandbox credentials:
 
 ```bash
 uv run pytest tests/test_live_integration.py -q --live
@@ -159,8 +159,7 @@ Run the local read-only live canary against sandbox when validating endpoint
 drift or shared composite helpers:
 
 ```bash
-BILLIT_API_KEY="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
-BILLIT_BASE_URL=https://api.sandbox.billit.be/v1 \
+BILLIT_SANDBOX_API_KEY_K4K="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
 BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
 uv run python scripts/local/live_billit_canary.py --read-only
 ```

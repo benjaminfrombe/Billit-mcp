@@ -102,7 +102,7 @@ are not currently MCP tools.
 | `suggest_payment_reconciliation` | Local helper plus `/orders`, `/financialTransactions` | Match open invoices to bank transactions. |
 | `generate_invoice_summary` | Local helper plus `/orders` | Summarize sales invoices for a date range. |
 | `list_overdue_invoices` | Local helper plus `/orders` | List overdue sales invoice IDs. |
-| `get_cashflow_overview` | Local helper plus `/orders` | Summarize income, costs, and net cashflow for a period. |
+| `get_cashflow_overview` | Local helper plus `/orders` | Summarize income, costs, and net cashflow for a `YYYY` or `YYYY-MM` period. |
 | `search_company` | `GET /misc/companysearch/{keywords}` | Search public company data through Billit. |
 | `get_type_codes` | `GET /misc/typecodes/{code_type}` | Retrieve Billit system code lists. |
 | `list_available_reports` | `GET /reports` | List report types. |

@@ -111,3 +111,13 @@ async def test_mcp_reports_use_canonical_report_endpoint(monkeypatch: pytest.Mon
 
     assert ("GET", "/reports", {}) in fake.calls
     assert ("GET", "/reports/sales-summary", {"params": {"start": "2024-01-01"}}) in fake.calls
+
+
+@pytest.mark.asyncio
+async def test_mcp_list_tools_clamp_page_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeBillitClient()
+    monkeypatch.setattr(mcp_server, "build_client", lambda: fake)
+
+    await mcp_server.list_orders(skip=-10, top=500)
+
+    assert ("GET", "/orders", {"params": {"$skip": 0, "$top": 120}}) in fake.calls
