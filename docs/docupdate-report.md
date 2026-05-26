@@ -42,8 +42,8 @@ Documentation exists for every major code area:
 - `billit/dependencies.py`: documented in `docs/architecture.md`.
 - `billit/services/`: documented in `docs/architecture.md`,
   `docs/development-testing.md`, and `docs/mcp-tools.md`.
-- `billit/smart_search.py`: documented in `docs/architecture.md` and
-  `docs/mcp-tools.md`.
+- `billit/smart_search.py`: documented in `docs/architecture.md` as a legacy
+  FastAPI/helper surface, not as a current stdio MCP tool.
 - `billit/tools/`: documented in `docs/fastapi-adapter.md`.
 - `billit/models/`: documented as implementation support in
   `docs/development-testing.md` and through route/tool docs.
@@ -54,9 +54,10 @@ Documentation exists for every major code area:
 
 ## Billit MCP Staleness Findings Resolved
 
-The old README claimed 66 MCP tools across 15 domains. Current code registers
-44 MCP tools in the packaged server. The new docs use the actual registered
-tool list and separately document the broader legacy FastAPI route table.
+The old README claimed 66 MCP tools across 15 domains. The packaged server now
+registers only the curated local API-key tool list. The new docs use the actual
+registered tool list and separately document the broader legacy FastAPI route
+table.
 
 The old docs pointed at `markov-kernel/Billit-mcp`. Public docs now point at
 `olivier-motium/Billit-mcp`.

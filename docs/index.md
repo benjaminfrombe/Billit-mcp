@@ -15,9 +15,9 @@ truth.
 
 Start with [Project Overview and Quickstart](../README.md), then read
 [Architecture and Data Flow](architecture.md). Together they explain the
-runtime split between the packaged MCP server and the legacy FastAPI adapter,
-the shared response envelope, the hosted OAuth runtime, and the directories you
-will edit most often.
+runtime split between the curated local API-key stdio server, the hosted OAuth
+runtime, and the legacy FastAPI adapter. They also explain the shared response
+envelope and the directories you will edit most often.
 
 After that, read [Development and Testing](development-testing.md). It explains
 the required Ruff and Pytest gates, how tests mock Billit API calls, and when
@@ -26,17 +26,17 @@ live tests are appropriate.
 ## Billit MCP Start Here for API Consumers
 
 Read [Configuration Reference](configuration.md) before wiring credentials into
-an MCP client. It describes production versus sandbox base URLs, required
-environment variables, macOS Keychain usage, and the exact variables the server
-loads at startup.
+an MCP client. It describes the required local API-key variables, production
+versus sandbox base URLs, local write/send gates, macOS Keychain usage, and
+the exact variables the server loads at runtime.
 
 Then read [MCP Tool Reference](mcp-tools.md). It lists each registered MCP tool,
-what Billit endpoint it forwards to, and current gotchas such as PascalCase
-payload fields and composite helper limitations.
+what Billit endpoint or helper it uses, and the raw legacy tool names that no
+longer exist in the stdio MCP surface.
 
 For hosted connector work, use [Architecture and Data Flow](architecture.md)
-as the entry point. Hosted mode is intentionally separate from the legacy raw
-FastAPI adapter and exposes only the curated OAuth-safe MVP tool set.
+as the entry point. Hosted mode is intentionally separate from local API-key
+stdio mode and exposes only the curated OAuth-safe MVP tool set.
 
 ## Billit MCP Start Here for Operators
 

@@ -6,14 +6,16 @@ updated: 2026-05-26
 # Billit MCP
 
 Billit MCP is a Python 3.12 Model Context Protocol server for the Billit REST
-API. It lets MCP clients call Billit operations for parties, products, orders,
-payments, files, webhooks, Peppol, reports, and utility lookups through a
-standard response envelope.
+API. The packaged stdio runtime is a curated local/private API-key connector
+for developers and power users. It exposes a narrow set of read tools plus the
+confirmation-gated sales-invoice draft/send workflow through a standard
+response envelope.
 
 The packaged runtime is the MCP stdio server in `src/billit_mcp/server.py`.
 The hosted OAuth runtime is the Streamable HTTP ASGI app in
 `src/billit_mcp/http_app.py`. The FastAPI app in `server.py` is a legacy local
-adapter used for HTTP smoke tests and route-level development.
+adapter used for HTTP smoke tests and route-level development; its raw route
+names are not registered as MCP tools.
 
 ## Billit MCP Runtime Quickstart
 
@@ -40,19 +42,25 @@ loaded automatically for local runs and is ignored by git.
 BILLIT_API_KEY=your-billit-api-key
 BILLIT_BASE_URL=https://api.billit.be/v1
 BILLIT_PARTY_ID=your-company-party-id
-BILLIT_CONTEXT_PARTY_ID=
 RATE_LIMIT_PER_MINUTE=50
+BILLIT_MCP_LOCAL_ALLOW_WRITES=0
+BILLIT_MCP_LOCAL_ALLOW_SENDS=0
 LOG_LEVEL=INFO
 ```
 
 Use the sandbox by setting `BILLIT_BASE_URL=https://api.sandbox.billit.be/v1`
 and using sandbox credentials. Do not mix sandbox and production API keys.
+`BILLIT_CONTEXT_PARTY_ID` is ignored in the local MCP runtime; accountant
+context is disabled for this MVP.
 
 ## Billit MCP Hosted OAuth Runtime
 
 Hosted mode is separate from local API-key stdio mode:
 
 ```bash
+BILLIT_MCP_DATABASE_URL="sqlite+aiosqlite:///.local/billit-mcp-hosted.db" \
+uv run python -m billit_mcp.persistence.migrations
+
 uv run uvicorn billit_mcp.http_app:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
@@ -62,6 +70,9 @@ Billit OAuth grants, encrypted token storage, synced company authorization,
 structured filters, and server-owned confirmation challenges for invoice
 sending. It does not register raw legacy FastAPI tools and does not read
 `BILLIT_API_KEY` or process-scoped `BILLIT_PARTY_ID`.
+
+Hosted startup never runs ORM schema creation. `/readyz` is healthy only after
+the configured database is reachable and Alembic is at the hosted head.
 
 ## Billit MCP Client Configuration
 
@@ -88,26 +99,21 @@ For always-latest runs without a persistent install, see
 
 ## Billit MCP Tool Coverage
 
-The packaged MCP server currently registers 44 tools:
+The packaged API-key stdio server exposes exactly these MCP tools:
 
-- Parties: list, create, fetch, and update customers or suppliers.
-- Products: list, fetch, and upsert products or services.
-- Orders: list, create, fetch, patch, delete, send, record payments, add
-  booking entries, and list deleted orders.
-- Financial transactions: list transactions, upload bank files, and confirm
-  imports.
-- Account: account information, SSO token, sequence numbers, and company
-  registration.
-- Documents: list, upload, inspect, and download Billit files.
-- Webhooks: create, list, delete, and refresh webhook secrets.
-- Peppol: participant lookup, participant registration, and order sending.
-- AI/composite helpers: local smart search plus shared local composite helpers.
-- Utilities and reports: company search, type codes, report list, and report
-  retrieval.
+`billit.connection_status`, `billit.list_companies`,
+`billit.search_orders`, `billit.get_order`, `billit.resolve_party`,
+`billit.lookup_peppol_receiver`, `billit.list_financial_transactions`,
+`billit.list_reports`, `billit.get_report`, `billit.invoice.prepare`,
+`billit.invoice.create_draft`, `billit.invoice.prepare_send`,
+`billit.invoice.confirm_send`, `billit.invoice.get_delivery_status`, and
+`billit.invoice.summary`.
 
-The legacy FastAPI adapter exposes a broader HTTP route surface for local
-development. See [FastAPI Adapter Routes](docs/fastapi-adapter.md) for the
-exact route table and current limitations.
+Raw legacy MCP names such as `create_order`, `send_order`, `delete_order`,
+`upload_document`, `download_file`, webhook mutation tools, SSO token tools,
+and arbitrary OData passthrough are no longer registered by `python -m
+billit_mcp`. The legacy FastAPI adapter still exposes a broader HTTP route
+surface for local development. See [FastAPI Adapter Routes](docs/fastapi-adapter.md).
 
 ## Billit MCP Response Envelope
 
@@ -178,7 +184,7 @@ drift or shared composite helpers:
 ```bash
 BILLIT_SANDBOX_API_KEY_K4K="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
 BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
-uv run python scripts/local/live_billit_canary.py --read-only
+uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly
 ```
 
 Run the hosted OAuth read-only canary only after seeding a sandbox Billit OAuth
@@ -187,6 +193,14 @@ grant in the local hosted database:
 ```bash
 BILLIT_SANDBOX_PARTY_ID="$BILLIT_SANDBOX_PARTY_ID" \
 uv run python scripts/local/live_billit_canary.py --read-only --mode hosted-oauth-readonly
+```
+
+Seed that local grant from an existing sandbox OAuth token pair:
+
+```bash
+BILLIT_MCP_CANARY_BILLIT_ACCESS_TOKEN="..." \
+BILLIT_MCP_CANARY_BILLIT_REFRESH_TOKEN="..." \
+uv run python scripts/local/seed_hosted_oauth_grant.py
 ```
 
 ## Billit MCP Repository Layout

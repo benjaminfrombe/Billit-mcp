@@ -25,8 +25,14 @@ uv run python -m billit_mcp
 Run the hosted Streamable HTTP MCP server:
 
 ```bash
+BILLIT_MCP_DATABASE_URL="sqlite+aiosqlite:///.local/billit-mcp-hosted.db" \
+uv run python -m billit_mcp.persistence.migrations
+
 uv run uvicorn billit_mcp.http_app:create_app --factory --host 127.0.0.1 --port 8000
 ```
+
+The hosted app does not run ORM schema creation at startup. `/readyz` checks DB
+connectivity and the Alembic head revision.
 
 Run the legacy FastAPI adapter:
 
@@ -36,8 +42,10 @@ uv run uvicorn server:app --reload
 
 ## Billit MCP Source Layout for Contributors
 
-`src/billit_mcp/server.py` is the packaged MCP tool registration file. Add MCP
-tools here only when they should be available to AI clients.
+`src/billit_mcp/server.py` is the packaged MCP stdio registration file. It
+registers only the curated local API-key tools from
+`src/billit_mcp/local_api_key/`. Do not add raw Billit endpoint wrappers or
+high-risk mutation tools here.
 
 `src/billit_mcp/http_app.py`, `src/billit_mcp/registry.py`, and
 `src/billit_mcp/hosted_tools/` are the hosted OAuth runtime. Hosted tools are
@@ -46,7 +54,7 @@ settings.
 
 `billit/tools/` contains FastAPI route modules. Add routes here when local HTTP
 testing or the legacy adapter needs coverage, but remember that this does not
-automatically add an MCP tool.
+add an MCP tool.
 
 `billit/client.py` contains the shared REST client. Changes here affect both
 MCP tools and the FastAPI adapter.
@@ -94,8 +102,14 @@ writes sanitized evidence under `.local/`:
 ```bash
 BILLIT_SANDBOX_API_KEY_K4K="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
 BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
-uv run python scripts/local/live_billit_canary.py --read-only
+uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly
 ```
+
+The API-key canary proves auth, `accountInformation` company behavior, explicit
+`PartyID` headers, one live collection response, reports, financial
+transactions, one shared helper, curated `connection_status`, curated
+`search_orders`, curated `invoice.prepare`, and write blocking. Evidence is
+sanitized under `.local/billit-live-canary/<timestamp>/`.
 
 Hosted OAuth read-only canary mode uses the local hosted database and requires
 a pre-seeded sandbox Billit OAuth grant. It forces the hosted refresh-token path
@@ -106,6 +120,20 @@ BILLIT_SANDBOX_PARTY_ID="$BILLIT_SANDBOX_PARTY_ID" \
 BILLIT_MCP_DATABASE_URL="sqlite+aiosqlite:///.local/billit-mcp-hosted.db" \
 uv run python scripts/local/live_billit_canary.py --read-only --mode hosted-oauth-readonly
 ```
+
+To pre-seed that local grant from an already-obtained sandbox OAuth token pair
+without automating Billit login:
+
+```bash
+BILLIT_MCP_CANARY_BILLIT_ACCESS_TOKEN="..." \
+BILLIT_MCP_CANARY_BILLIT_REFRESH_TOKEN="..." \
+BILLIT_MCP_DATABASE_URL="sqlite+aiosqlite:///.local/billit-mcp-hosted.db" \
+uv run python scripts/local/seed_hosted_oauth_grant.py
+```
+
+The seed helper encrypts token material, fetches `accountInformation`, syncs
+authorized companies, and marks the connection active only after at least one
+company is synced. It prints only sanitized metadata.
 
 For sandbox runs, credential precedence is
 `BILLIT_SANDBOX_API_KEY_K4K`, `BILLIT_SANDBOX_API_KEY`, macOS Keychain service

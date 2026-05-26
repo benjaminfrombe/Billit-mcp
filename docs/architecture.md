@@ -5,23 +5,42 @@ updated: 2026-05-26
 
 # Billit MCP Architecture and Data Flow
 
-Billit MCP has three server surfaces. The packaged runtime remains an MCP
+Billit MCP has three server surfaces. The packaged runtime is a curated MCP
 stdio server for local/private API-key usage. A hosted Streamable HTTP runtime
-is being added for public OAuth usage. The legacy FastAPI adapter is retained
-for local HTTP development and route tests.
+serves public OAuth usage. The legacy FastAPI adapter is retained for local
+HTTP development and route tests.
 
 ## Billit MCP Packaged Runtime
 
 `src/billit_mcp/server.py` creates a `FastMCP("billit-mcp")` instance and
-registers tool functions with `@mcp.tool()`. Running `python -m billit_mcp`
-loads `.env`, configures logging, imports the MCP server, and starts stdio
-protocol handling.
+registers only the curated local API-key tools from
+`src/billit_mcp/local_api_key/`. Running `python -m billit_mcp` loads `.env`,
+configures logging, imports the MCP server, and starts stdio protocol handling.
 
-MCP tools use a process-scoped `BillitAPIClient` with environment-derived
-headers. The server lifespan closes that client when stdio handling shuts down.
-The current MCP surface registers 44 tools across parties, products, orders,
-financial transactions, account, documents, webhooks, Peppol, reports, utility
-lookups, and composite helpers.
+Local MCP tools use a process-scoped `BillitAPIClient` built from explicit
+`BILLIT_API_KEY`, `BILLIT_BASE_URL`, and `BILLIT_PARTY_ID`. The local runtime
+does not send `ContextPartyID` in the MVP. Redacted audit events, confirmation
+challenges, and idempotency records are stored in SQLite under ignored
+`.local/`, with no API keys, raw customer payloads, raw invoice payloads,
+files, or webhook bodies.
+
+The packaged stdio surface exposes exactly:
+
+- `billit.connection_status`
+- `billit.list_companies`
+- `billit.search_orders`
+- `billit.get_order`
+- `billit.resolve_party`
+- `billit.lookup_peppol_receiver`
+- `billit.list_financial_transactions`
+- `billit.list_reports`
+- `billit.get_report`
+- `billit.invoice.prepare`
+- `billit.invoice.create_draft`
+- `billit.invoice.prepare_send`
+- `billit.invoice.confirm_send`
+- `billit.invoice.get_delivery_status`
+- `billit.invoice.summary`
 
 ## Billit MCP Legacy FastAPI Adapter
 
@@ -93,13 +112,16 @@ Terraform.
 ## Billit MCP Shared Client and Response Envelope
 
 `billit/client.py` owns authentication, rate limiting, timeout behavior, and
-response normalization. It loads:
+response normalization. Legacy API-key callers can load:
 
 - `BILLIT_API_KEY`
 - `BILLIT_BASE_URL`
 - `BILLIT_PARTY_ID`
-- optional `BILLIT_CONTEXT_PARTY_ID`
 - optional `RATE_LIMIT_PER_MINUTE`
+
+The curated local API-key runtime passes explicit settings and forces
+`context_party_id=None`, so `ContextPartyID` is disabled even if
+`BILLIT_CONTEXT_PARTY_ID` is present in the environment.
 
 Every Billit response is returned as:
 
@@ -123,15 +145,16 @@ request-scoped FastAPI client from resetting its own bucket and accidentally
 overrunning Billit API limits.
 
 `BillitAPIClient` can be configured from environment variables, explicit
-`BillitSettings`, or explicit `BillitOAuthSettings`. Local stdio and the
-legacy adapter keep the env-derived API-key default. Hosted mode uses only
-`BillitOAuthSettings`, so local API-key semantics cannot leak into hosted
-requests.
+`BillitSettings`, or explicit `BillitOAuthSettings`. Local stdio builds
+explicit API-key settings from the required env vars and strips
+`ContextPartyID`; the legacy adapter keeps the env-derived API-key default.
+Hosted mode uses only `BillitOAuthSettings`, so local API-key semantics cannot
+leak into hosted requests.
 
 FastAPI routes receive a request-scoped client through `billit/dependencies.py`
-and close its underlying `httpx.AsyncClient` after each request. MCP tools use
-one process-scoped client from `src/billit_mcp/server.py` and close it through
-the FastMCP lifespan hook.
+and close its underlying `httpx.AsyncClient` after each request. Local MCP
+tools use one process-scoped client from the local API-key runtime and close it
+through the FastMCP lifespan hook.
 
 ## Billit MCP Smart Search Data Flow
 
@@ -143,18 +166,19 @@ keyword checks and `SequenceMatcher`, then returns ranked results.
 List-style Billit calls build pagination parameters through one shared helper,
 which clamps `$top` to 120 before requests reach the Billit API.
 
-The helper is used by both `GET /ai/smart-search` in the FastAPI adapter and
-the `smart_search` / `debug_smart_search` MCP tools. Other composite helpers
-live under `billit/services/` so MCP and FastAPI call local shared code instead
-of forwarding local `/ai/...` routes through the Billit REST client. Upstream
-Billit API failures are propagated instead of being converted into empty
-successful results.
+The helper is used by `GET /ai/smart-search` in the FastAPI adapter. The local
+stdio MCP surface no longer exposes `smart_search` or `debug_smart_search`;
+curated tools use structured allowlisted filters instead. Shared composite
+helpers live under `billit/services/` so MCP, canaries, and FastAPI can call
+local shared code instead of forwarding local `/ai/...` routes through the
+Billit REST client.
 
 ## Billit MCP Known Architecture Gotchas
 
-MCP and FastAPI tool coverage is not identical. The FastAPI adapter contains
-routes for accountant feeds, GL accounts, OCR processing, extra AI composites,
-and Peppol inbox operations that are not currently registered as MCP tools.
+MCP and FastAPI tool coverage is intentionally not identical. The FastAPI
+adapter contains raw development routes for accountant feeds, GL accounts, OCR
+processing, extra AI composites, and Peppol inbox operations that are not
+registered as MCP tools.
 
 Report tools use the canonical Billit path `/reports`. Financial transaction
 tools use `/financialTransactions`. The local live canary records these

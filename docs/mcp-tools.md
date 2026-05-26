@@ -5,15 +5,49 @@ updated: 2026-05-26
 
 # Billit MCP Tool Reference
 
-This page documents the tools registered by the packaged MCP stdio server in
-`src/billit_mcp/server.py` and the curated hosted OAuth MVP in
-`src/billit_mcp/hosted_tools/`. It does not describe every legacy FastAPI route.
-For the HTTP adapter, see [FastAPI Adapter Routes](fastapi-adapter.md).
+This page documents the tools registered by MCP runtimes. It does not describe
+every legacy FastAPI route. For the HTTP adapter, see
+[FastAPI Adapter Routes](fastapi-adapter.md).
+
+## Billit MCP Local API-Key Stdio Tools
+
+`python -m billit_mcp` exposes only this local/private API-key tool surface.
+It does not register raw legacy create/update/delete/webhook/admin tools from
+`billit/tools/`, and it does not provide an opt-in raw mode.
+
+| Local tool | Billit endpoint or service | Purpose |
+| --- | --- | --- |
+| `billit.connection_status` | `GET /account/accountInformation` | Check API-key auth, base URL, configured `BILLIT_PARTY_ID`, company entitlement parsing, local write/send gates, and local state path. |
+| `billit.list_companies` | `GET /account/accountInformation` | List company Party IDs visible to the API key and mark whether the configured PartyID is authorized. |
+| `billit.search_orders` | `GET /orders` | Search orders from structured allowlisted filters only. |
+| `billit.get_order` | `GET /orders/{order_id}` | Fetch one order by ID with explicit `PartyID`. |
+| `billit.resolve_party` | `GET /parties` | Resolve a customer or supplier without guessing on ambiguity. |
+| `billit.lookup_peppol_receiver` | `GET /peppol/participantInformation/{identifier}` | Check Peppol receiver visibility. |
+| `billit.list_financial_transactions` | `GET /financialTransactions` | List imported bank transactions without mutation tools. |
+| `billit.list_reports` | `GET /reports` | List available reports. |
+| `billit.get_report` | `GET /reports/{report_id}` | Fetch a report using bounded scalar parameters. |
+| `billit.invoice.prepare` | Shared local preflight | Validate an invoice draft request without writing. |
+| `billit.invoice.create_draft` | `POST /orders` | Create a sales invoice draft when `BILLIT_MCP_LOCAL_ALLOW_WRITES=1`; never sends. |
+| `billit.invoice.prepare_send` | `GET /orders/{order_id}` plus local confirmation state | Refetch and validate an invoice, then create a local confirmation challenge when `BILLIT_MCP_LOCAL_ALLOW_SENDS=1`. |
+| `billit.invoice.confirm_send` | `GET /orders/{order_id}` then `POST /orders/commands/send` | Refetch, revalidate, atomically consume the matching confirmation challenge, then send. |
+| `billit.invoice.get_delivery_status` | `GET /orders/{order_id}` | Summarize fresh delivery and payment state. |
+| `billit.invoice.summary` | Shared local helper plus `GET /orders` | Summarize sales invoices for a date range. |
+
+Local mode requires `BILLIT_API_KEY`, `BILLIT_BASE_URL`, and
+`BILLIT_PARTY_ID`. Every Billit call sends `apiKey` and explicit `PartyID`.
+`ContextPartyID` is disabled for this MVP. Reads can continue with warnings
+when company-list parsing is inconclusive; draft creation and sending require
+the configured PartyID to be verified by `accountInformation`.
+
+Local audit, idempotency, and confirmation state are stored under ignored
+`.local/`. They store redacted operational metadata only: no API keys, raw
+customer payloads, raw invoice payloads, files, or webhook bodies.
 
 ## Billit MCP Hosted OAuth MVP Tools
 
-Hosted mode exposes only this curated tool surface. It does not register raw
-legacy create/update/delete/webhook/admin tools from `billit/tools/`.
+Hosted mode exposes only this curated tool surface. It uses Billit OAuth grants
+and synced `company_party_id` authorization. Hosted mode must not read local
+API-key environment variables.
 
 | Hosted tool | Billit endpoint or service | Purpose |
 | --- | --- | --- |
@@ -29,109 +63,31 @@ legacy create/update/delete/webhook/admin tools from `billit/tools/`.
 | `billit.invoice.confirm_send` | `POST /orders/commands/send` | Send only after consuming the matching challenge. |
 | `billit.invoice.get_delivery_status` | `GET /orders/{order_id}` | Summarize fresh delivery and payment state. |
 
-Hosted calls must include an explicit `company_party_id`, and the server checks
-that ID against companies synced from Billit account information. Invoice
-sending never accepts a generic `confirmed: true`; the model must use the
-`prepare_send` / `confirm_send` challenge flow.
+Hosted calls must include an explicit `environment` and `company_party_id`, and
+the server checks that ID against companies synced from Billit account
+information. Invoice sending never accepts a generic `confirmed: true`; the
+model must use the `prepare_send` / `confirm_send` challenge flow.
 
-## Billit MCP Party Tools
+## Billit MCP Raw Tool Migration
 
-| Tool | Billit endpoint | Purpose |
-| --- | --- | --- |
-| `list_parties` | `GET /parties` | List customers or suppliers with optional OData filtering. |
-| `create_party` | `POST /parties` | Create a customer or supplier from a Billit-style payload. |
-| `get_party` | `GET /parties/{party_id}` | Fetch one party by Billit Party ID. |
-| `update_party` | `PATCH /parties/{party_id}` | Patch party fields with a Billit-style payload. |
+The old broad stdio MCP surface is intentionally removed. Use these curated
+tools instead:
 
-Use PascalCase fields in payloads unless a wrapper explicitly documents a
-different shape. Party IDs are Billit IDs, not local database IDs.
+| Old raw MCP intent | Replacement |
+| --- | --- |
+| `list_orders` with raw `$filter` | `billit.search_orders` with structured fields. |
+| `get_order` | `billit.get_order`. |
+| `list_parties` | `billit.resolve_party` with `role`, name, VAT, email, or external provider ID. |
+| `check_peppol_participant` | `billit.lookup_peppol_receiver`. |
+| `list_financial_transactions` | `billit.list_financial_transactions`. |
+| `list_available_reports` | `billit.list_reports`. |
+| `get_report` | `billit.get_report`. |
+| `generate_invoice_summary` | `billit.invoice.summary`. |
+| `create_order` for sales invoices | `billit.invoice.prepare`, then `billit.invoice.create_draft` with local writes enabled. |
+| `send_order` | `billit.invoice.prepare_send`, then `billit.invoice.confirm_send` with local sends enabled. |
 
-## Billit MCP Product Tools
-
-| Tool | Billit endpoint | Purpose |
-| --- | --- | --- |
-| `list_products` | `GET /products` | List products with optional OData filtering. |
-| `get_product` | `GET /products/{product_id}` | Fetch one product by ID. |
-| `upsert_product` | `POST /products` | Create or update a product. |
-
-The minimal product model currently maps `ProductID` and `Description`.
-Additional Billit fields can still pass through dictionary payloads in the MCP
-tool, but route-level validation in the legacy FastAPI adapter is narrower.
-
-## Billit MCP Order Tools
-
-| Tool | Billit endpoint | Purpose |
-| --- | --- | --- |
-| `list_orders` | `GET /orders` | List invoices, credit notes, and other orders. |
-| `create_order` | `POST /orders` | Create an order from a Billit payload. |
-| `get_order` | `GET /orders/{order_id}` | Fetch order details by ID. |
-| `update_order` | `PATCH /orders/{order_id}` | Patch Billit-supported order fields. |
-| `delete_order` | `DELETE /orders/{order_id}` | Delete a draft order. |
-| `record_payment` | `POST /orders/{order_id}/payment` | Record payment information. |
-| `send_order` | `POST /orders/commands/send` | Send one or more orders by SMTP, Peppol, or another Billit transport. |
-| `add_booking_entries` | `POST /orders/{order_id}/booking` | Add accounting booking entries. |
-| `list_deleted_orders` | `GET /orders/deleted` | Retrieve deleted order markers for synchronization. |
-
-`send_order` maps `Email` to `SMTP` and can set the `StrictTransportType`
-header when `strict_transport` is true. Billit may fall back from Peppol to
-email unless strict transport is requested.
-
-## Billit MCP Financial Transaction Tools
-
-| Tool | Billit endpoint | Purpose |
-| --- | --- | --- |
-| `list_financial_transactions` | `GET /financialTransactions` | List imported bank transactions. |
-| `import_transactions_file` | `POST /financialTransactions/importFile` | Upload or reference a bank statement import. |
-| `confirm_transaction_import` | `POST /financialTransactions/commands/import` | Confirm a transaction import. |
-
-The MCP implementation sends JSON with file path metadata. The legacy FastAPI
-adapter accepts uploaded files for this workflow.
-
-## Billit MCP Account and Document Tools
-
-| Tool | Billit endpoint | Purpose |
-| --- | --- | --- |
-| `get_account_information` | `GET /account/accountInformation` | Inspect authenticated account details. |
-| `get_sso_token` | `GET /account/ssoToken` | Request an SSO token for the Billit web UI. |
-| `get_next_sequence_number` | `POST /account/sequences` | Request or consume a sequence number. |
-| `register_company` | `POST /account/registercompany` | Register a company under accountant flows. |
-| `list_documents` | `GET /documents` | List documents with optional filtering. |
-| `upload_document` | `POST /documents` | Upload document metadata and file reference. |
-| `get_document` | `GET /documents/{document_id}` | Fetch document metadata. |
-| `download_file` | `GET /files/{file_id}` | Download a Billit file by File ID. |
-
-File upload behavior differs between MCP and FastAPI. Validate real upload
-flows against sandbox before depending on them operationally.
-
-## Billit MCP Webhook and Peppol Tools
-
-| Tool | Billit endpoint | Purpose |
-| --- | --- | --- |
-| `create_webhook` | `POST /webhook` | Create a webhook subscription. |
-| `list_webhooks` | `GET /webhook` | List webhook subscriptions. |
-| `delete_webhook` | `DELETE /webhook/{webhook_id}` | Delete a webhook. |
-| `refresh_webhook_secret` | `POST /webhook/{webhook_id}/refresh` | Refresh webhook signing secret. |
-| `check_peppol_participant` | `GET /peppol/participantInformation/{identifier}` | Check Peppol registration. |
-| `register_peppol_participant` | `POST /peppol/participants` | Register the current company on Peppol. |
-| `send_peppol_invoice` | `POST /peppol/sendOrder` | Send an order through Peppol. |
-
-The FastAPI adapter exposes additional Peppol inbox and unregister routes that
-are not currently MCP tools.
-
-## Billit MCP Composite, Utility, and Report Tools
-
-| Tool | Billit endpoint or helper | Purpose |
-| --- | --- | --- |
-| `smart_search` | Local helper plus `/orders`, `/parties`, `/products` | Search Billit records using local scoring. |
-| `debug_smart_search` | Local helper plus `/orders`, `/parties`, `/products` | Return search results with parsed debug metadata. |
-| `suggest_payment_reconciliation` | Local helper plus `/orders`, `/financialTransactions` | Match open invoices to bank transactions. |
-| `generate_invoice_summary` | Local helper plus `/orders` | Summarize sales invoices for a date range. |
-| `list_overdue_invoices` | Local helper plus `/orders` | List overdue sales invoice IDs. |
-| `get_cashflow_overview` | Local helper plus `/orders` | Summarize income, costs, and net cashflow for a `YYYY` or `YYYY-MM` period. |
-| `search_company` | `GET /misc/companysearch/{keywords}` | Search public company data through Billit. |
-| `get_type_codes` | `GET /misc/typecodes/{code_type}` | Retrieve Billit system code lists. |
-| `list_available_reports` | `GET /reports` | List report types. |
-| `get_report` | `GET /reports/{report_id}` | Retrieve a report with optional query parameters. |
-
-Composite helpers are implemented locally in shared service modules. They do
-not call local `/ai/...` FastAPI paths through the Billit REST client.
+No MCP replacement exists for raw party/product/order mutation, deletes,
+payment marking, booking entries, bank-file import, SSO tokens, company
+registration, document upload/download, webhook mutation, Peppol registration,
+or arbitrary Billit endpoint passthrough. Keep those in development-only
+FastAPI adapter work until a scoped, confirmation-gated workflow is designed.

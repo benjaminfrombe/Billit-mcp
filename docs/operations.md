@@ -16,6 +16,27 @@ Run the packaged MCP server locally:
 uv run python -m billit_mcp
 ```
 
+The packaged stdio server is the curated local API-key runtime. It requires
+`BILLIT_API_KEY`, `BILLIT_BASE_URL`, and `BILLIT_PARTY_ID` for tool calls,
+sends `apiKey` plus explicit `PartyID` on every Billit request, and ignores
+`BILLIT_CONTEXT_PARTY_ID`.
+
+Draft creation is disabled unless:
+
+```bash
+export BILLIT_MCP_LOCAL_ALLOW_WRITES=1
+```
+
+Invoice sending is disabled unless:
+
+```bash
+export BILLIT_MCP_LOCAL_ALLOW_SENDS=1
+```
+
+Sending still requires `billit.invoice.prepare_send` followed by
+`billit.invoice.confirm_send`; generic `confirmed: true` is not accepted.
+Redacted local audit, confirmation, and idempotency state lives under `.local/`.
+
 Run the legacy FastAPI adapter locally:
 
 ```bash
@@ -36,6 +57,17 @@ Hosted mode exposes `/mcp`, OAuth metadata and token endpoints, Billit OAuth
 connect/callback endpoints, `/healthz`, and `/readyz`. It uses the hosted
 database configured by `BILLIT_MCP_DATABASE_URL`.
 
+Hosted startup does not create or mutate schema. Run Alembic before starting
+the hosted app:
+
+```bash
+BILLIT_MCP_DATABASE_URL="sqlite+aiosqlite:///.local/billit-mcp-hosted.db" \
+uv run python -m billit_mcp.persistence.migrations
+```
+
+`/readyz` returns unready until the database is reachable and the recorded
+Alembic revision is the hosted head.
+
 ## Billit MCP Docker Operation
 
 Build and run the MCP stdio server:
@@ -52,6 +84,14 @@ For hosted containers, override the default stdio command with:
 
 ```bash
 uvicorn billit_mcp.http_app:create_app --factory --host 0.0.0.0 --port 8000
+```
+
+Do not run migrations from every App Runner instance at boot. Use a one-shot
+container command with the same image and `BILLIT_MCP_DATABASE_URL`, executed
+inside the VPC so it can reach private RDS:
+
+```bash
+uv run python -m billit_mcp.persistence.migrations
 ```
 
 ## Billit MCP PyPI Packaging
@@ -112,7 +152,7 @@ evidence under `.local/billit-live-canary/`.
 ```bash
 BILLIT_SANDBOX_API_KEY_K4K="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
 BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
-uv run python scripts/local/live_billit_canary.py --read-only
+uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly
 ```
 
 Hosted OAuth mode requires a sandbox Billit OAuth grant already stored in the
@@ -122,6 +162,19 @@ local hosted database. It does not automate Billit login:
 BILLIT_SANDBOX_PARTY_ID="$BILLIT_SANDBOX_PARTY_ID" \
 uv run python scripts/local/live_billit_canary.py --read-only --mode hosted-oauth-readonly
 ```
+
+If you already have a sandbox Billit OAuth token pair, seed the local hosted
+database without automating login:
+
+```bash
+BILLIT_MCP_CANARY_BILLIT_ACCESS_TOKEN="..." \
+BILLIT_MCP_CANARY_BILLIT_REFRESH_TOKEN="..." \
+BILLIT_MCP_DATABASE_URL="sqlite+aiosqlite:///.local/billit-mcp-hosted.db" \
+uv run python scripts/local/seed_hosted_oauth_grant.py
+```
+
+The seed helper stores encrypted grant material, syncs accountInformation
+companies, and prints only the connection id and company count.
 
 Do not commit `.local/` canary evidence. The report intentionally excludes API
 keys, customer names, emails, invoice bodies, and raw Billit response payloads.
@@ -141,6 +194,10 @@ containers, Route53 custom-domain records, CloudWatch retention/alarm,
 private-subnet VPC connector, and NAT-backed public egress for Billit API
 calls. Terraform creates secret containers only; populate secret values outside
 Terraform so application secrets do not enter state.
+
+Before routing traffic to a new App Runner revision, run the migration command
+as a one-shot CodeBuild-in-VPC or ECS/Fargate task using the same container
+image and runtime secrets. The App Runner start command remains uvicorn-only.
 
 ## Billit MCP Troubleshooting Startup Failures
 
