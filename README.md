@@ -209,7 +209,9 @@ uv run python scripts/local/seed_hosted_oauth_grant.py
 src/billit_mcp/          Packaged MCP stdio server and hosted OAuth runtime.
 src/billit_mcp/auth/     MCP OAuth and Billit OAuth bridge services.
 src/billit_mcp/hosted_tools/ Curated hosted OAuth-safe MCP tools.
+src/billit_mcp/local_api_key/ Curated local API-key stdio runtime services.
 src/billit_mcp/persistence/  Hosted SQLAlchemy models and database helpers.
+src/billit_mcp/services/ Shared MCP runtime workflow helpers.
 billit/client.py         Shared async Billit REST client and response envelope.
 billit/dependencies.py   FastAPI dependency factory and request-scoped cleanup.
 billit/services/         Shared adapter-neutral business helpers.

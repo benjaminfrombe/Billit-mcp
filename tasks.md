@@ -14,6 +14,11 @@ updated: 2026-05-26
 
 ## DONE
 
+- [x] Split the Billit MCP review stack for maintainability (2026-05-26):
+  extracted a shared invoice workflow for local API-key and hosted OAuth
+  draft/send safety, split the local runtime facade into focused services,
+  thinned hosted tool registration, split read-only canary modules, and added a
+  source-size quality guard.
 - [x] Implemented the new local/private API-key MCP runtime (2026-05-26):
   `python -m billit_mcp` now exposes only curated API-key tools, disables
   `ContextPartyID`, rejects raw OData passthrough, uses local redacted audit,

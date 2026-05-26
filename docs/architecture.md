@@ -16,6 +16,9 @@ HTTP development and route tests.
 registers only the curated local API-key tools from
 `src/billit_mcp/local_api_key/`. Running `python -m billit_mcp` loads `.env`,
 configures logging, imports the MCP server, and starts stdio protocol handling.
+`LocalAPIKeyRuntime` is the compatibility facade; focused local modules own
+settings, client audit, company entitlement, local state, read tools, and
+invoice tools.
 
 Local MCP tools use a process-scoped `BillitAPIClient` built from explicit
 `BILLIT_API_KEY`, `BILLIT_BASE_URL`, and `BILLIT_PARTY_ID`. The local runtime
@@ -66,7 +69,8 @@ server from `python -m billit_mcp`.
 
 Hosted mode uses `src/billit_mcp/registry.py` and
 `src/billit_mcp/hosted_tools/` instead of importing the legacy raw tool
-surface. The hosted registry intentionally exposes only the MVP tools:
+surface. Hosted registration is grouped by company, order, party, and invoice
+tool modules. The hosted registry intentionally exposes only the MVP tools:
 
 - `billit.connection_status`
 - `billit.list_companies`
@@ -83,6 +87,12 @@ surface. The hosted registry intentionally exposes only the MVP tools:
 Hosted mode does not call `BillitSettings.from_env()` and does not read
 `BILLIT_API_KEY` or `BILLIT_PARTY_ID`. Billit access is always through a stored
 Billit OAuth grant and an explicit, validated `company_party_id`.
+
+Local API-key and hosted OAuth invoice draft/send tools share the guarded
+workflow in `src/billit_mcp/services/invoice_workflow.py`. Runtime adapters own
+their own gates, scopes, company checks, idempotency state, and confirmation
+state, while the workflow owns preflight, refetch/revalidate, operation hashes,
+atomic challenge consumption, and the Billit send call ordering.
 
 ## Billit MCP Hosted Auth and Persistence
 

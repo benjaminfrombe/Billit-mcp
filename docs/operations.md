@@ -178,8 +178,9 @@ companies, and prints only the connection id and company count.
 
 Do not commit `.local/` canary evidence. The report intentionally excludes API
 keys, customer names, emails, invoice bodies, and raw Billit response payloads.
-The canary refuses non-GET probes unless `BILLIT_LIVE_CANARY_ALLOW_WRITES=1`,
-and no write probes are registered in the current canary.
+The current canary modes remain read-only even if
+`BILLIT_LIVE_CANARY_ALLOW_WRITES=1` is present; no write probes are registered
+in this review stack.
 
 ## Billit MCP AWS Hosting
 

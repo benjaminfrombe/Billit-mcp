@@ -45,12 +45,14 @@ uv run uvicorn server:app --reload
 `src/billit_mcp/server.py` is the packaged MCP stdio registration file. It
 registers only the curated local API-key tools from
 `src/billit_mcp/local_api_key/`. Do not add raw Billit endpoint wrappers or
-high-risk mutation tools here.
+high-risk mutation tools here. `LocalAPIKeyRuntime` is a facade; keep local
+settings, client audit, company entitlement, state, read tools, and invoice
+tools in focused modules under that package.
 
 `src/billit_mcp/http_app.py`, `src/billit_mcp/registry.py`, and
 `src/billit_mcp/hosted_tools/` are the hosted OAuth runtime. Hosted tools are
 curated separately and must not import `billit/tools/` or local API-key
-settings.
+settings. Hosted tool registration should stay thin and grouped by behavior.
 
 `billit/tools/` contains FastAPI route modules. Add routes here when local HTTP
 testing or the legacy adapter needs coverage, but remember that this does not
@@ -58,6 +60,10 @@ add an MCP tool.
 
 `billit/client.py` contains the shared REST client. Changes here affect both
 MCP tools and the FastAPI adapter.
+
+`src/billit_mcp/services/invoice_workflow.py` owns the shared guarded invoice
+draft/send workflow for local API-key and hosted OAuth modes. Keep sensitive
+ordering there instead of duplicating prepare/send logic in tool handlers.
 
 `billit/services/` contains adapter-neutral composite helpers shared by MCP
 tools, canaries, and FastAPI routes.
@@ -81,6 +87,8 @@ uv build
 
 Ruff, mypy, import-linter, pytest, coverage, and diff-cover are configured in
 `pyproject.toml`. Do not introduce broad exclusions without a clear reason.
+`tests/test_quality_guards.py` also keeps new runtime and canary source files
+below the review-size threshold.
 
 ## Billit MCP Test Types
 
@@ -105,11 +113,13 @@ BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
 uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly
 ```
 
-The API-key canary proves auth, `accountInformation` company behavior, explicit
-`PartyID` headers, one live collection response, reports, financial
-transactions, one shared helper, curated `connection_status`, curated
-`search_orders`, curated `invoice.prepare`, and write blocking. Evidence is
-sanitized under `.local/billit-live-canary/<timestamp>/`.
+The API-key canary implementation is split from hosted OAuth canary code, so
+the default local canary path does not import hosted DB/OAuth dependencies. It
+proves auth, `accountInformation` company behavior, explicit `PartyID` headers,
+one live collection response, reports, financial transactions, one shared
+helper, curated `connection_status`, curated `search_orders`, curated
+`invoice.prepare`, and write blocking. Evidence is sanitized under
+`.local/billit-live-canary/<timestamp>/`.
 
 Hosted OAuth read-only canary mode uses the local hosted database and requires
 a pre-seeded sandbox Billit OAuth grant. It forces the hosted refresh-token path
