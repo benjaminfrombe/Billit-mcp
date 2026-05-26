@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import importlib
+import logging
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+import billit.protocols as billit_protocols
+import billit_mcp
 import billit_mcp.server as mcp_server
+from billit_mcp import stdio
 from billit.client import BillitSettings
 from billit_mcp.local_api_key.runtime import LOCAL_API_KEY_TOOL_NAMES, LocalAPIKeyRuntime
 from billit_mcp.local_api_key.state import LocalStateStore
@@ -102,6 +107,48 @@ def _runtime(
         client_factory=factory,
     )
     return runtime, clients
+
+
+def test_stdio_log_level_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "debug")
+    assert stdio.get_log_level() == logging.DEBUG
+
+    monkeypatch.setenv("LOG_LEVEL", "${LOG_LEVEL:-warning}")
+    assert stdio.get_log_level() == logging.WARNING
+
+    monkeypatch.setenv("LOG_LEVEL", "${LOG_LEVEL}")
+    assert stdio.get_log_level() == logging.INFO
+
+    monkeypatch.setenv("LOG_LEVEL", "not-a-level")
+    assert stdio.get_log_level() == logging.INFO
+
+
+def test_stdio_entrypoints_delegate_to_mcp_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(stdio, "load_dotenv", lambda: calls.append("dotenv"))
+    monkeypatch.setattr(stdio, "configure_logging", lambda: calls.append("logging"))
+    monkeypatch.setattr(stdio.mcp, "run", lambda mode: calls.append(mode))
+
+    stdio.run_stdio()
+
+    assert calls == ["dotenv", "logging", "stdio"]
+    assert importlib.import_module("billit_mcp.__main__").run_stdio is stdio.run_stdio
+
+
+def test_package_main_delegates_to_stdio(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = False
+
+    def fake_run_stdio() -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(billit_mcp, "run_stdio", fake_run_stdio)
+
+    billit_mcp.main()
+
+    assert called is True
+    assert billit_protocols.BillitRequester.__name__ == "BillitRequester"
 
 
 @pytest.mark.asyncio
