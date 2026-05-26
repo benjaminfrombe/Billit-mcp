@@ -1,0 +1,43 @@
+---
+title: "Billit MCP Task Log"
+updated: 2026-05-26
+---
+
+# Billit MCP Task Log
+
+## TODO
+
+- [ ] Keep `docs/mcp-tools.md` synchronized with `src/billit_mcp/server.py`
+  whenever MCP tools are added, removed, or renamed.
+- [ ] Decide whether the legacy FastAPI adapter remains supported public API,
+  moves to development-only status, or is removed.
+- [ ] Rewire or remove packaged MCP composite tools that currently forward to
+  local `/ai/...` adapter paths instead of native Billit API endpoints.
+
+## DONE
+
+- [x] Full repository documentation refresh from the current codebase
+  (2026-05-26): rewrote public docs, removed stale/private docs, added
+  code-derived architecture/runtime/testing/operations docs, and added
+  frontmatter to maintained Markdown.
+- [x] Documentation refresh validation suite (2026-05-26): `poetry install`,
+  `poetry run ruff check .`, `poetry run pytest -q`, `git diff --check`,
+  frontmatter check, and local Markdown link check all completed.
+- [x] Code quality remediation plan (2026-05-26): Ruff clean, pytest baseline
+  green except live skips, tracked credential files removed, and canonical MCP
+  entrypoint restored.
+- [x] AGENTS.md updated with Olivier Drafting Voice instructions
+  (2026-05-26).
+
+## Learnings
+
+- Canonical runtime is `python -m billit_mcp` or `poetry run billit-mcp`;
+  root `server.py` is a legacy FastAPI/local-test adapter.
+- The packaged MCP server currently registers 44 tools. The legacy FastAPI
+  adapter exposes a broader route surface and should be documented separately.
+- Keep `.env`, `.pypirc`, Billit API keys, and package tokens out of git; use
+  environment variables, MCP client config, macOS Keychain, or another secret
+  manager.
+- Public docs should point at `https://github.com/olivier-motium/Billit-mcp`.
+- A freshly created Poetry environment may exist but be empty; run
+  `poetry install` before interpreting pytest import errors.
