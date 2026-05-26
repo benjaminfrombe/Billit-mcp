@@ -5,10 +5,17 @@ updated: 2026-05-26
 
 # Billit MCP Billit API Source Reference Guide
 
-The `billit_docs_markdown/` directory contains upstream Billit API reference
-snapshots. These documents are not project architecture docs and should not be
-treated as an implementation plan. They are retained so contributors can check
+The `billit_docs_markdown/` directory contains cleaned upstream Billit API
+reference snapshots copied from `/Users/olivierdebeufderijcker/Downloads/billit_docs`.
+These documents are not project architecture docs and should not be treated as
+an implementation plan. They are retained so contributors can check
 Billit-specific payload rules without leaving the repository.
+
+Start with the
+[QMD Reference Index](../billit_docs_markdown/index.md) when searching by
+topic. It groups the source pages into category hubs for authentication,
+orders, payments, files, receiving, Peppol, webhooks, PA France, KSeF, and
+generic reference/error material.
 
 ## Billit API Source Docs for Common Implementation Tasks
 
@@ -33,7 +40,7 @@ Use [Webhooks](../billit_docs_markdown/webhooks.md) and
 webhook configuration or callback verification docs.
 
 Use [Who is an E-Invoice Receiver](../billit_docs_markdown/who-is-a-einvoice-receiver.md)
-and [Send via Email When E-Invoice Delivery Is Not Possible](../billit_docs_markdown/send-via-email-when-delivery-as-einvoice-is-not-possible.md)
+and [Send via Email Capabilities](../billit_docs_markdown/email-sending-enable-disable.md)
 when changing Peppol participant checks or transport fallback behavior.
 
 ## Billit API Source Docs Maintenance Policy
@@ -41,10 +48,11 @@ when changing Peppol participant checks or transport fallback behavior.
 Do not duplicate large upstream examples into project docs. Link to the source
 reference and document only the local interpretation or local gotcha.
 
-Keep source docs focused and searchable. The old monolithic `all_docs.md` file
-was removed because it duplicated the split reference files and produced poor
-QMD retrieval behavior.
+Keep source docs focused and searchable. Each maintained source Markdown file
+has `title`, `updated`, `source_url`, `source_slug`, `category`, and `topics`
+frontmatter so QMD can retrieve it by task, endpoint family, and upstream URL
+slug.
 
 If a new upstream reference page is added, give it `title` and `updated`
-frontmatter and link it from
+frontmatter, assign the closest `category`, and link it from the
 [Billit API Source Docs Reference Index](../billit_docs_markdown/index.md).

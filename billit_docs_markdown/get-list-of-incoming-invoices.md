@@ -1,32 +1,41 @@
 ---
-title: "Billit API Source Docs - Get List Of Incoming Invoices"
+title: "Get List of Incoming Invoices"
 updated: 2026-05-26
+source_url: "https://docs.billit.be/docs/get-list-of-incoming-invoices"
+source_slug: "get-list-of-incoming-invoices"
+category: "receiving-inbox"
+topics:
+  - receiving
+  - inbox
+  - get
+  - list
+  - incoming
+  - invoices
 ---
 
-# Get List of Incoming Invoices\n\n### Get including filtering   [Skip link to Get including filtering](https://docs.billit.be/docs/get-list-of-incoming-invoices\#get-including-filtering)
+### Get including filtering
 
-The processing is similar as for sales invoices. For Sales Invoices, we refer to : [https://docs.billit.be/docs/retrieve-invoice-information](https://docs.billit.be/docs/retrieve-invoice-information)
+The processing is similar as for sales invoices. For Sales Invoices, we refer to : [https://docs.billit.be/docs/retrieve-invoice-information](retrieve-invoice-info-and-status.md)
 
-Because you sometimes want to query on lists of invoices or retrieve purchase invoice which you do not already have a unique ID for we have our list API endpoint. This endpoint also returns a order object but less properties and it will be contained in a list.
+Because you sometimes want to query on lists of invoices or retrieve purchase invoices which you do not already have a unique ID for we have our list API endpoint. This endpoint also returns an order object with some properties and it will be contained in a list.
 
-Below the endpoint with and without Odata filtering. More info about Odata can be found here -> [Odata Info](https://docs.billit.be/docs/odata)
+Below the endpoint with and without Odata filtering. More info about Odata can be found here -> [Odata Info](odata.md). This includes the list of supported fields for Odata.
 
 | Endpoint | Method | Response | Extra Info |
 | --- | --- | --- | --- |
 | /v1/orders | GET | List of Orders | Full list of sales and cost/expense invoices / credit notes |
 | /v1/orders?$filter=OrderType+eq+'Invoice'+and+OrderDirection+eq+'Cost' | GET | With Odata | Full list of sales and cost/expense invoices / credit notes |
-| v1/orders?$filter=OrderType+eq+'Invoice'+and+<br>OrderDirection+eq+'Cost'+and+<br>LastModified+ge+DateTime'2025-04-01' | GET | With Odata | List of sales and cost/expense invoices / credit notes, filtered on modification date. |
+| v1/orders?$filter=OrderType+eq+'Invoice'+and+ OrderDirection+eq+'Cost'+and+ LastModified+ge+DateTime'2025-04-01' | GET | With Odata | List of sales and cost/expense invoices / credit notes, filtered on modification date. |
 
-For date filtering use the modification date. For Incoming invoices, time difference between CreationDate and Modification Date is small.
+For date filtering use the modification date.
 
-### Result main info   [Skip link to Result main info](https://docs.billit.be/docs/get-list-of-incoming-invoices\#result-main-info)
+### Result main info
 
 The first return values of the Json body are:
 
 Json First fields
 
-```\1
-
+```json
 {
     "Items": [\
         {\
@@ -36,7 +45,6 @@ Json First fields
                 "FileID": "28acb9ee-d0b1-4ee9-8a9d-2317712a9a11"\
             },\
             "OrderNumber": "QS-Contact2",\
-\
 ```\
 \
 Explanation:\
@@ -46,9 +54,9 @@ Explanation:\
 - OrderPDF : Billit ID of the linked file.\
 - OrderNumber : the Invoice or CreditNote number of the supplier.\
 \
-The Json result contains a selection of the data, the full data are obtained when getting one specific document (next step)\
+The Json result contains a selection (summary) of the data, the full data are obtained when getting one specific document (next step)\
 \
-Updatedabout 1 month ago\
+Updated 27 days ago\
 \
 * * *\
 \
@@ -56,4 +64,5 @@ Did this page help you?\
 \
 Yes\
 \
-No
+No\
+\

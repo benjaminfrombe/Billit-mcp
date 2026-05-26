@@ -1,9 +1,20 @@
 ---
-title: "Billit API Source Docs - Network Environments"
+title: "Einvoice Network environments"
 updated: 2026-05-26
+source_url: "https://docs.billit.be/docs/network-environments"
+source_slug: "network-environments"
+category: "peppol-e-invoicing"
+topics:
+  - peppol
+  - invoicing
+  - network
+  - environments
+  - einvoice
 ---
 
-# Network environments\n\n**When I send an invoice will they be delivered?**
+# Einvoice Network environments
+
+**When I send an invoice will they be delivered?**
 
 It depends on the transport type chosen. There are different networks which we use on our 2 environments
 
@@ -19,13 +30,3 @@ It depends on the transport type chosen. There are different networks which we u
 | OSA | Test network | Production network |
 | Email | Production network | Production network |
 | Letter | Disabled on Test | Production network |
-
-Updatedabout 1 year ago
-
-* * *
-
-Did this page help you?
-
-Yes
-
-No

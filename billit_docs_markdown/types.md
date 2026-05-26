@@ -1,9 +1,16 @@
 ---
-title: "Billit API Source Docs - Types"
+title: "Types"
 updated: 2026-05-26
+source_url: "https://docs.billit.be/docs/types"
+source_slug: "types"
+category: "reference-errors"
+topics:
+  - reference
+  - errors
+  - types
 ---
 
-# Types\n\n# Party Types   [Skip link to Party Types](https://docs.billit.be/docs/types\#party-types)
+# Party Types
 
 Party types are mostly used when using the Party Endpoint or when creating an invoice using the Party object instead of a Party ID.
 
@@ -12,14 +19,14 @@ Party types are mostly used when using the Party Endpoint or when creating an in
 | Customer | Used for outgoing invoices |
 | Supplier | Used for incoming invoices |
 
-## Address Types   [Skip link to Address Types](https://docs.billit.be/docs/types\#address-types)
+## Address Types
 
 | Type | Definition |
 | --- | --- |
 | DeliveryAddress | Used to set a delivery address on a invoice |
 | InvoiceAddress | Used to set a invoicing address on a invoice |
 
-## Order Types   [Skip link to Order Types](https://docs.billit.be/docs/types\#order-types)
+## Order Types
 
 | Type | Definition |
 | --- | --- |
@@ -29,14 +36,14 @@ Party types are mostly used when using the Party Endpoint or when creating an in
 | DeliveryNote | Delivery notice |
 | OrderForm | Order notice, proof of order |
 
-## Order Direction   [Skip link to Order Direction](https://docs.billit.be/docs/types\#order-direction)
+## Order Direction
 
 | Type | Definition |
 | --- | --- |
 | Income | These outgoing sales invoices are for your incoming cashflow (AR) |
-| Cost | These incoming supplier invoices are for your outgoing cashflow |
+| Cost | These incoming supplier invoices are for your outgoing cashflow (AP) |
 
-## Order Status   [Skip link to Order Status](https://docs.billit.be/docs/types\#order-status)
+## Order Status
 
 | Status constants |
 | --- |
@@ -58,7 +65,7 @@ Party types are mostly used when using the Party Endpoint or when creating an in
 | Delivered |
 | PaymentFileGenerated |
 
-## Order Approval states   [Skip link to Order Approval states](https://docs.billit.be/docs/types\#order-approval-states)
+## Order Approval states
 
 | Status constants |
 | --- |
@@ -67,7 +74,7 @@ Party types are mostly used when using the Party Endpoint or when creating an in
 | Rejected |
 | ToApproveByMe |
 
-## Transport Types   [Skip link to Transport Types](https://docs.billit.be/docs/types\#transport-types)
+## Transport Types
 
 | Type | Definition |
 | --- | --- |
@@ -79,8 +86,11 @@ Party types are mostly used when using the Party Endpoint or when creating an in
 | OSA | To Send a notification report to Hungarian government |
 | ANAF | To Send an Invoice to Romanian government |
 | SAT | To send an invoice to the Mexican network |
+| MyInvois | Malaysia MyInvois |
+| Chorus | French GOV Chorus Network |
+| PDP (Planned) | French E-invoice network (Planned) |
 
-## Integrations   [Skip link to Integrations](https://docs.billit.be/docs/types\#integrations)
+## Integrations
 
 | Type | Definition |
 | --- | --- |
@@ -91,8 +101,9 @@ Party types are mostly used when using the Party Endpoint or when creating an in
 | SAT | Mexican Network |
 | KSeF | Polish Network |
 | ANAF | To Send an Invoice to Romanian government |
+| MyInvois | Malaysia MyInvois |
 
-## Order Payment Types   [Skip link to Order Payment Types](https://docs.billit.be/docs/types\#order-payment-types)
+## Order Payment Types
 
 | Type |
 | --- |
@@ -105,14 +116,14 @@ Party types are mostly used when using the Party Endpoint or when creating an in
 | Domiciliation |
 | PrivateAccount |
 
-## Webhook Entity Types   [Skip link to Webhook Entity Types](https://docs.billit.be/docs/types\#webhook-entity-types)
+## Webhook Entity Types
 
 | Type | Definition |
 | --- | --- |
 | Order | Orders, creditnotes, deliverynotes, ... |
 | Message | Message contains all digital Transport Types |
 
-## Webhook Update Types   [Skip link to Webhook Update Types](https://docs.billit.be/docs/types\#webhook-update-types)
+## Webhook Update Types
 
 | Type | Definition |
 | --- | --- |
@@ -120,27 +131,17 @@ Party types are mostly used when using the Party Endpoint or when creating an in
 | U | Updated entity |
 | D | Deleted entity |
 
-## Sequence Types   [Skip link to Sequence Types](https://docs.billit.be/docs/types\#sequence-types)
+## Sequence Types
 
 | Type |
 | --- |
 | Income-Invoice |
 | Income-CreditNote |
 
-## Accounting Cost Types   [Skip link to Accounting Cost Types](https://docs.billit.be/docs/types\#accounting-cost-types)
+## Accounting Cost Types
 
 | Type |
 | --- |
 | GoodsForReSale |
 | ServicesAndMiscellaneousGoods |
 | Investments |
-
-Updated30 days ago
-
-* * *
-
-Did this page help you?
-
-Yes
-
-No

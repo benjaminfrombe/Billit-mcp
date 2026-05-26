@@ -1,33 +1,54 @@
 ---
-title: "Billit API Source Docs - Where Can I Find My Companyid Or A Partyid"
+title: "PartyID and Key"
 updated: 2026-05-26
+source_url: "https://docs.billit.be/docs/partyid-and-key"
+source_slug: "partyid-and-key"
+category: "getting-started-authentication"
+topics:
+  - getting
+  - started
+  - authentication
+  - where
+  - find
+  - companyid
+  - partyid
+  - key
 ---
 
-# Where can I find my CompanyID or a PartyID\n\nEach company, customer, supplier in Billit has its own ID. This ID is separate from a custom ID you give. This ID allows you to use them in request without having to provide all the data in the request.
+## Finding your PartyID
 
-**There are a few ways on how to get these IDs**
+- PartyID can be view via the MyBillit user interface.
+- PartyID on sandbox and PartyID on production are different
+- Below example for a company on the sandbox:
 
-- By creating a Party via de API [/v1/parties](https://docs.billit.be/reference/party_postparty-1))
+![](https://files.readme.io/7383339e044dce021b7d5fd061f7c59318b7f7f82c20ad819c0056a739029286-2025-10-10_07-34-09.png)
 
+## Finding your API Key - Only allowed for non-commercial integrations.
 
-When you create a party via this endpoint a unique ID will be returned.
+A non-commercial integration is a personal integration developed and used exclusively by an individual or organization to automate their own administration. It is not shared, distributed, sold, or otherwise made available to third parties, and it has no commercial purpose or business model attached.
 
-- By retrieving a Party via de API [/v1/parties/{partyID}](https://docs.billit.be/reference/party_getparty-1)
+Do not share your API-key with others, Billit will never ask for your API key.
 
-- By going to the page of the Party
+![](https://files.readme.io/749a68dd01b871f2776a68df0eabd00aa4a181e42ad7b19331f6d00802e478c3-Afbeelding2.png)
 
+## How to use it in your API-Integration
 
-1. If you need your own company ID you can find it by going to the my company page in Billit and copying the Unique ID from the URL
-2. If you need the Unique ID from a customer or supplier you can go to the edit screen for that party and get the ID from the URL.
+Secret API Key and PartyID are put in the header.
 
-Note: when no party is specified in the request headers, the Billit API will use the oldest existing company that can be linked to the user's API key. Provide the partyid header and a companyid to select which company needs to be used.
+Below example with Postman.
 
-Updatedalmost 2 years ago
+**PartyID in Postman Header:**
 
-* * *
+![](https://files.readme.io/d794c886f5712d7596c7689c8210d5f991fc4b70696ee0acea27b5513d754028-partyID_real.png)
 
-Did this page help you?
+> ⚠️
+>
+> **When Using Multiple Companies**
+>
+> When you send/receive for multiple companies, make sure you always use the **partyID of the specific company**.
+>
+> The secret key can be the same for all companies because it is linked to a user who has access rights to all companies.
 
-Yes
+**API key in Postman Header Authorisation:**
 
-No
+![](https://files.readme.io/0a2a04a9269f328c91cffb4fa428ae83726e927ea4b19d472b4b809eaf9cc116-ap_key.png)

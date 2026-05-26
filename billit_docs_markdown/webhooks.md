@@ -1,35 +1,72 @@
 ---
-title: "Billit API Source Docs - Webhooks"
+title: "Webhooks"
 updated: 2026-05-26
+source_url: "https://docs.billit.be/docs/webhooks"
+source_slug: "webhooks"
+category: "webhooks-status"
+topics:
+  - webhooks
+  - status
 ---
 
-# Webhooks\n\nThe Billit API Allows you to use Webhooks. This so your integration can listen automatically to any updates and trigger reactions.
+# Webhooks
 
-Billit usess webhooks to notify your application when an event happens in your account. These are useful to able to catch async events such as an invoice that has been paid, updated or created.
+The Billit API Allows you to use Webhooks. This so your integration can listen automatically to any updates and trigger reactions.
 
-## How to use the Billit Webhooks   [Skip link to How to use the Billit Webhooks](https://docs.billit.be/docs/webhooks\#how-to-use-the-billit-webhooks)
+Billit uses webhooks to notify your application when an event happens in your account. These are useful to able to catch async events such as an invoice that has been paid, updated or created.
+
+## Webhook Entity Types
+
+| Type | Definition |
+| --- | --- |
+| Order | Orders, creditnotes, deliverynotes, .... Focus on document creation and update. |
+| Message | Message contains all digital Transport Types. This can contain status feedbacks and in general more details. |
+
+## Webhook Update Types
+
+| Type | Definition |
+| --- | --- |
+| I | A new entity |
+| U | Updated entity |
+| D | Deleted entity |
+
+It is recommended to always add an Update type.
+
+## How to use the Billit Webhooks
 
 The Billit webhooks push HTTPS calls to the registered URL provided. We will send a JSON payload to your integration. This data can be used to execute actions in you backend systems.
 
-### Steps to receive a webhook   [Skip link to Steps to receive a webhook](https://docs.billit.be/docs/webhooks\#steps-to-receive-a-webhook)
+### Steps to receive a webhook
 
 1. Create the webhook [Webhook](https://docs.billit.be/reference/webhook)
-2. Handle the returned request. This payload will provide you a Secret. This secret can be used to verify incomming webhooks
+2. Handle the returned request. This payload will provide you a Secret. This secret can be used to verify incoming webhooks
 3. You can delete or retrieve webhooks via the API
 4. If needed you can refresh the Secret by using the API endpoint
 
-The Webhooks will soon be visible in the web application.
+The Webhooks will soon be visible your web application.
 
-## Webhook Signatures   [Skip link to Webhook Signatures](https://docs.billit.be/docs/webhooks\#webhook-signatures)
+## SSL
 
-We sign all webhooks we send out with a signature. This Signature can be decrypted by using the Secret we provided you when creating the webhook. More info can be found here -> [Verify Signature](https://docs.billit.be/docs/verify-signature)
+Please make sure the endpoint has an active SSL domain. We will refuse to send webhooks to non SSL endpoints.
 
-Updatedover 1 year ago
+## Webhook Signatures
 
-* * *
+All webhook messages contain a signature.
 
-Did this page help you?
+If you want to verify the signature : the signature can be decrypted by using the Secret provided when creating the webhook. More info can be found here -> [Verify Signature](verify-signature.md)
 
-Yes
+## Webhook Validity Period and Updates
 
-No
+Webhooks remain valid, there is no expiration date or time.
+
+Updates that are possible:
+
+- You can delete a webhook
+- You can refresh the secret of the webhook
+
+- [Use webhooks to catch E-Invoice statuses](use-webhooks-to-catch-e-invoice-statuses.md)
+- [Verify Signature Webhook](verify-signature.md)
+- [Get and Delete Webhook](get-and-delete.md)
+- [/v1/webhooks](https://docs.billit.be/reference/webhook_postwebhook)
+- [Refresh Webhook](https://docs.billit.be/reference/refresh-webhook)
+- [/v1/webhooks](https://docs.billit.be/reference/webhook_getwebhooks)

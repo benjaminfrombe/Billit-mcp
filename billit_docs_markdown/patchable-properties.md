@@ -1,11 +1,23 @@
 ---
-title: "Billit API Source Docs - Patchable Properties"
+title: "Patchable Properties"
 updated: 2026-05-26
+source_url: "https://docs.billit.be/docs/patchable-properties"
+source_slug: "patchable-properties"
+category: "orders-invoices"
+topics:
+  - orders
+  - invoices
+  - patchable
+  - properties
 ---
 
-# Patchable Properties\n\nSome endpoints allow patching. Below you can find which of the endpoints allow it and which property is allowed to be patched.
+# Patchable Properties
 
-# Order Endpoint   [Skip link to Order Endpoint](https://docs.billit.be/docs/patchable-properties\#order-endpoint)
+Some endpoints allow patching, others are not allowed.
+
+Below you can find which of the endpoints allow it and which property is allowed to be patched.
+
+# Order Endpoint
 
 | Property Name | Property Type |
 | --- | --- |
@@ -18,7 +30,7 @@ updated: 2026-05-26
 | Invoiced | Boolean |
 | AccountantVerificationNeeded | Boolean |
 
-# Party Endpoint   [Skip link to Party Endpoint](https://docs.billit.be/docs/patchable-properties\#party-endpoint)
+# Party Endpoint
 
 | Property Name | Property Type |
 | --- | --- |
@@ -45,13 +57,3 @@ updated: 2026-05-26
 | IBAN | String |
 | Language | String |
 | VATLiable | Boolean |
-
-Updatedabout 2 years ago
-
-* * *
-
-Did this page help you?
-
-Yes
-
-No

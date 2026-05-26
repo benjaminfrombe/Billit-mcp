@@ -1,39 +1,71 @@
 ---
-title: "Billit API Source Docs - Ventilation Codes"
+title: "Ventilation Codes (VAT)"
 updated: 2026-05-26
+source_url: "https://docs.billit.be/docs/ventilation-codes"
+source_slug: "ventilation-codes"
+category: "payments-accounting"
+topics:
+  - payments
+  - accounting
+  - ventilation
+  - codes
+  - vat
 ---
 
-# Ventilation Codes\n\nWhen creating orders it is possible to add a ventilation code to the invoice. These codes represents VAT information. Information below is elaborated when sending is to TransferType Peppol.
+# Why Ventilation Codes
 
-# Income / Sales Invoices   [Skip link to Income / Sales Invoices](https://docs.billit.be/docs/ventilation-codes\#income--sales-invoices)
+When creating orders it is possible to add a ventilation code to the invoice. This code represents VAT or tax information.
 
-There is no need to include a ventillation code in the API JSON Body:
+It can be used for multiple networks / transport types:
 
-- When tax % greater than zero (Ventillation Code is 2, 3, 4 , ...)
-- When tax % is 0, and no specific code or exemption reason is need. Peppol TaxcategoryID will be Z and Tax exemption reason will be empty.
+- Open/Peppol (information see below)
+- Email with UBL attachment
+- Other networks (see specific information pages or documentation)
 
-When Tax includes lines of 0 % and Specific codes and exemption reasons are needed, then a specific ventilation code must be included. This applies to the Peppol Taxcategory ID AE, E, K, G. More info about the meaning : [Peppol CodeList](https://docs.peppol.eu/poacc/billing/3.0/codelist/UNCL5305/).
+# Income / Sales Invoices
 
-Below the overview for Sales Invoices:
+When to use a ventilation code:
 
-| Billit Ventilation Code | Description Ventilation Code | Default Vat % | Peppol UBL TaxCategory ID | TaxExemptionReason Text in Peppol UBL |
-| --- | --- | --- | --- | --- |
-| 1 | 0% | 0.00 | Z | - |
-| 2 | 6% | 6.00 | S | - |
-| 3 | 12% | 12.00 | S | - |
-| 4 | 21% | 21.00 | S | - |
-| 21 | BTW Verlegd (VAT shifted, VAT Reverse charges) | 0.00 | AE | Reverse Charge |
-| 22 | Div. Buiten BTW (Misc. Excluding VAT) | 0.00 | E | Exempt from VAT |
-| 24 | Marge (Margin) | 0.00 | E | Exempt from VAT |
-| 51 | IC Goederen (IC Goods) | 0.00 | K | VAT exempt for EEA intra-community supply of goods and services |
-| 55 | IC Diensten (IC Services) | 0.00 | K | VAT exempt for EEA intra-community supply of goods and services |
-| 70 | Import / Export | 0.00 | G | Free export item, VAT not charged |
+- When tax % greater than zero
+  - No requirement to add ventilation code
+  - It is allowed to add it
+- When tax % is indicated in Json as 0 %:
+  - no ventilation code is added : Peppol TaxcategoryID will be Z and Tax exemption reason will be empty
+  - ventilation code is added :
+    - use see table below, and no specific code or exemption reason is need.
+    - When Tax includes lines of 0 % and Specific codes and exemption reasons are needed, then a specific ventilation code must be included. This applies to the Peppol Taxcategory ID AE, E, K, G. More info about the meaning : [Peppol CodeList](https://docs.peppol.eu/poacc/billing/3.0/codelist/UNCL5305/).
+
+Below the overview for Sales Invoices (Income) :
+
+| Billit Ventilation Code | Descr. Ventilation Code | Default Vat % | UBL TaxCategory ID | TaxExemptionReason in UBL | Peppol description | VAT % in Json |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 0% (for BE) | 0.00 | Z |  | Zero rated goods<br>Code specifying that the goods are at a zero rate. | 0 |
+| 2 | Low % (6% for BE) | 6.00 | S |  | Vat Reverse Charge. Code specifying that the standard VAT rate is levied from the invoicee. | 6 (BE) |
+| 3 | Mid level (12% for BE) | 12.00 | S |  |  | 12 (BE) |
+| 4 | High VAT (21% for BE) | 21.00 | S |  |  | 21 (BE) |
+| 21 | BTW Verlegd (VAT shifted, VAT Reverse charges) + Cocontrator for BE/NL | 0.00 | AE | Reverse Charge | Vat Reverse Charge. Standard VAT rate is levied from the invoicee. |  |
+| 22 | Div. Buiten BTW (Misc. Excluding VAT) | 0.00 | O | Miscellaneous non-VAT | Services outside scope of tax. Taxes are not applicable to the services. | No VAT percentage |
+| 24 | Marge (Margin) | 0.00 | E | Exempt from VAT | Exempt from Tax.<br>Taxes are not applicable. |  |
+| 51 | IC Goederen (IC Goods) | 0.00 | K | VAT exempt for EEA intra-community supply of goods and services | VAT exempt for EEA intra-community supply of goods and services |  |
+| 55 | IC Diensten (IC Services) | 0.00 | K | VAT exempt for EEA intra-community supply of goods and services | VAT exempt for EEA intra-community supply of goods and services |  |
+| 70 | Import / Export | 0.00 | G | Free export item, VAT not charged | Free export item, VAT not charged |  |
+| 101 | International transport of People | 0.00 | E | Exempt from VAT | Exempt from Tax |  |
+| 102 | Import via EU | 0.00 | E | Exempt from VAT | Exempt from Tax |  |
+| 104 | OSS | 0.00 | E | Exempt from VAT | Exempt from Tax |  |
 
 How to use it practically:
 
-- Ventilation code is included on header level (no need to include it on line level)
-- Ventilation code is only needed when Taxcategory ID AE, E, K or G is used
-- Per invoice, only 1 Ventillation Code is mentioned
+- Scenario 1 : No ventilation code is added (UBL Tax category ID will be Z)
+- Scenario 2 : Ventilation code is included on **header** level (recommended on header)
+
+  - All lines with VAT percentage 0 will use this ventilation code
+- Scenario 3: Ventilation code is used on line level
+  - Ventilation code is only needed when Taxcategory ID O, AE, E, K or G is used (in all other cases Billit does generate the correct UBL"
+  - Each line with VAT percentage 0:
+    - if ventilation code is present on line level : this ventiliation code will be used
+    - if ventilation code is present on header level, not on line level : ventilation code on header will be used
+    - If ventilation code is not present on header and on line : code Z will be used
+    - do only use this if you have multiple VAT codes linked to VAT amount 0 on 1 invoice
 
 Below an Example :
 
@@ -45,22 +77,17 @@ Below an Example :
 
   - Peppol UBL File
 
-
     - Subtotals: TaxcategoryID K and TaxExemption Reason are present:
 
 ![](https://files.readme.io/763e6f94d2aa65e8e36c92ff012c033b13f007c62d49d130d9241fd3c4f6833d-afbeelding.png)
     - Detail line : ClassifiedTaxCategory is set to K for lines with 0 %:
-
-![](https://files.readme.io/c5c4752b5edc33ac8d8f0f1e24f5f22bff8574fe0d6a05e5c47d1e1308eea480-afbeelding.png)
-
-- Below the example files:
-  - Json Body with ventillation code 55
-  - Peppol UBL with TaxCategoryID K
+- Below the example files (2)
+  - 1 : Json Body with 1x ventilation code 55
+  - 2 : Generated Peppol UBL by Billit with TaxCategoryID K
 
 Json Ventilation Code 55Peppol UBL Taxcategory ID K
 
-```\1
-
+```json
 {
     "OrderNumber": "month-41.100-5",
     "OrderTitle": "FC24000230",
@@ -81,7 +108,7 @@ Json Ventilation Code 55Peppol UBL Taxcategory ID K
             },\
         ],
         "Contact": "Jean Delveaux",
-        "VATNumber": "BE0437295202",
+        "VATNumber": "BE043729999",
         "PartyType": "Customer",
         "VATLiable": true,
         "VATDeductable": true,
@@ -119,11 +146,9 @@ Json Ventilation Code 55Peppol UBL Taxcategory ID K
         },\
     ],
 }
-
 ```
 
-```\1
-
+```json
 <?xml version="1.0"?>
 <Invoice xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">
   <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</cbc:CustomizationID>
@@ -336,27 +361,10 @@ Json Ventilation Code 55Peppol UBL Taxcategory ID K
     </cac:Price>
   </cac:InvoiceLine>
 </Invoice>
-
 ```
 
-# Cost   [Skip link to Cost](https://docs.billit.be/docs/ventilation-codes\#cost)
+# About Tax Exemption Reason
 
-| Code | Description | Default Vat Amount |
-| --- | --- | --- |
-| 1 | Binnenland (Inland) | NULL |
-| 21 | BTW Verlegd (VAT shifted) | 0.00 |
-| 22 | Div. Buiten BTW (Misc. Excluding VAT) | NULL |
-| 111 | Marge (Margin) | 0.00 |
-| 51 | IC Goederen (IC Goods) | 0.00 |
-| 55 | IC Diensten (IC Services) | 0.00 |
-| 102 | Import Via EU | NULL |
+The tax exemption reasons are automatically generated by Billit based on the ventilation code on header.
 
-Updated15 days ago
-
-* * *
-
-Did this page help you?
-
-Yes
-
-No
+If you also want to include your own description 'e.g. legal clause' then you can include this as text in the "Comments" section of the Json.

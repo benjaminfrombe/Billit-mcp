@@ -1,13 +1,27 @@
 ---
-title: "Billit API Source Docs - Retrieve Invoice Info And Status"
+title: "Retrieve Invoice Info and Status"
 updated: 2026-05-26
+source_url: "https://docs.billit.be/docs/retrieve-invoice-information"
+source_slug: "retrieve-invoice-information"
+category: "orders-invoices"
+topics:
+  - orders
+  - invoices
+  - retrieve
+  - invoice
+  - info
+  - status
 ---
 
-# Retrieve Invoice Info and Status\n\nWhen an invoice has been created a unique ID is returned. With this ID you can use retrieve all information stored in Billit for this specific invoice. You will be able to retrieve the PDF, E-invoice delivery details, full tax calculations, Original sent E-invoice XML....
+# Retrieve Invoice Info and Status
+
+When an invoice has been created a unique ID is returned. With this ID you can use retrieve all information stored in Billit for this specific invoice. You will be able to retrieve the PDF, E-invoice delivery details, full tax calculations, Original sent E-invoice XML....
 
 Good news! The response you will receive is the same object as you used to create the invoice. Meaning no additional objects need to be created!
 
-> ## 📘  Testable request in Postman: 03 - Retrieve invoice data
+> 📘
+>
+> ### Testable request in Postman: 03 - Retrieve invoice data
 
 | Endpoint | Method | Response |
 | --- | --- | --- |
@@ -22,26 +36,25 @@ Because of the response containing al lot of information you will have a brief s
 | OrderID | UniqueID | Same ID as in request, the element needed for getting all info. |
 | CompanyID | UniqueID | Company Owner ID of the invoice |
 | OrderPDF | Object | Contains the PDF generated or provided for the invoice |
-| Attachments | List | Contains the Attachments for the invoice and will always contain the original JSON used to created the invoivce through API. |
+| Attachments | List<Object> | Contains the Attachments for the invoice and will always contain the original JSON used to created the invoivce through API. |
 | OrderNumber | ID | The Unique invoice ID provided or generated |
 | Customer | Object | Contains metadata for the invoice customer |
 | Supplier | Object | Contains metadata for the Supplier (Sales invoices== self) |
 | LastModified | DateTime | Last datetime when the invoice was modified |
 | Created | Datetime | The date when the api processed the invoice |
-| Orderlines | List | Contains the Invoice items in a list with tax calculated on them |
-| VatGroups | List | Contains the different vatgroups calculated for the Invoice |
+| Orderlines | List<Object> | Contains the Invoice items in a list with tax calculated on them |
+| VatGroups | List<Object> | Contains the different vatgroups calculated for the Invoice |
 | Paid | Bool | If the invoice was paid or a payments was received in Billit this will be set to true |
 | IsSent | Bool | If the invoice was sent Manually, API, or job it will be set to true |
 | PaymentLinks | Object | Contains the EPC QR code for payments |
 | CurrentDocumentDeliveryDetails | Object | Contains the information of the delivery of the document |
-| Messages | List | Contains all messages for incoming and outgoing traffic for the invoice |
+| Messages | List<object> | Contains all messages for incoming and outgoing traffic for the invoice |
 
 Example output below
 
 JSON
 
-```\1
-
+```json
 {
     "OrderID": HIDDEN,
     "CompanyID": HIDDEN,
@@ -318,15 +331,10 @@ JSON
     },
     "Messages": []
 }
-
 ```
 
-Updated23 days ago
-
-* * *
-
-Did this page help you?
-
-Yes
-
-No
+- [Retrieve List of invoices](retrieve-list-of-invoices.md)
+- [Get Status Info of a Sales Invoice](status-content-of-a-sales-invoice.md)
+- [Get Files](get-files.md)
+- [IMR : More Information](imr.md)
+- [Webhooks for pushing e-invoice statuses](retrieving-your-first-e-invoice-statuses.md)
