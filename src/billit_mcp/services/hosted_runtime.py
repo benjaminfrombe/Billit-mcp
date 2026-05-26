@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -19,8 +19,11 @@ from billit_mcp.persistence.models import (
     ConfirmationChallenge,
     IdempotencyRecord,
 )
+from billit_mcp.services.invoice_workflow import hash_payload as shared_hash_payload
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from billit.client import BillitAPIClient
     from billit_mcp.auth.billit_oauth import BillitOAuthBridge
     from billit_mcp.auth.security import JWTService
@@ -75,6 +78,16 @@ class HostedToolError(RuntimeError):
             },
             "error_code": self.error_code,
         }
+
+
+@dataclass(frozen=True)
+class HostedClaims:
+    """Typed hosted MCP claims used by tool handlers."""
+
+    actor_id: str
+    client_id: str
+    correlation_id: str
+    raw: dict[str, Any]
 
 
 class HostedToolRuntime:
@@ -215,6 +228,44 @@ class HostedToolRuntime:
                 error_code="UNAUTHORIZED_COMPANY",
             )
 
+    def typed_claims(self, claims: dict[str, Any]) -> HostedClaims:
+        """Return typed claim fields required by hosted tools."""
+
+        return HostedClaims(
+            actor_id=str(claims["sub"]),
+            client_id=str(claims["client_id"]),
+            correlation_id=str(claims["jti"]),
+            raw=claims,
+        )
+
+    async def list_authorized_companies(
+        self,
+        *,
+        connection_id: str,
+        environment: str,
+    ) -> list[dict[str, Any]]:
+        """Return sanitized company rows authorized for a hosted connection."""
+
+        async with self.database.session() as session:
+            companies = (
+                await session.scalars(
+                    select(BillitCompany).where(
+                        BillitCompany.connection_id == connection_id,
+                        BillitCompany.environment == environment,
+                        BillitCompany.active.is_(True),
+                    )
+                )
+            ).all()
+        return [
+            {
+                "company_party_id": company.company_party_id,
+                "environment": company.environment,
+                "active": company.active,
+                "is_default": company.is_default,
+            }
+            for company in companies
+        ]
+
     async def billit_client(
         self,
         *,
@@ -267,6 +318,30 @@ class HostedToolRuntime:
                 tool_name=tool_name,
             ),
         )
+
+    @asynccontextmanager
+    async def authorized_billit_client(
+        self,
+        *,
+        claims: HostedClaims,
+        environment: str,
+        company_party_id: int,
+        tool_name: str,
+    ) -> AsyncIterator[tuple[BillitConnection, AuditedBillitClient]]:
+        """Yield an authorized Billit client and always close it."""
+
+        connection, client = await self.billit_client(
+            actor_id=claims.actor_id,
+            client_id=claims.client_id,
+            correlation_id=claims.correlation_id,
+            tool_name=tool_name,
+            environment=environment,
+            company_party_id=company_party_id,
+        )
+        try:
+            yield connection, client
+        finally:
+            await client.close()
 
     async def create_confirmation_challenge(
         self,
@@ -647,4 +722,4 @@ def error_result(exc: Exception) -> dict[str, Any]:
 def hash_payload(payload: dict[str, Any]) -> str:
     """Return a stable hash for a JSON-compatible operation payload."""
 
-    return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    return shared_hash_payload(payload)
