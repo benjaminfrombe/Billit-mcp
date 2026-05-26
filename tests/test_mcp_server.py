@@ -12,8 +12,8 @@ import pytest
 import billit.protocols as billit_protocols
 import billit_mcp
 import billit_mcp.server as mcp_server
-from billit_mcp import stdio
 from billit.client import BillitSettings
+from billit_mcp import stdio
 from billit_mcp.local_api_key.runtime import LOCAL_API_KEY_TOOL_NAMES, LocalAPIKeyRuntime
 from billit_mcp.local_api_key.state import LocalStateStore
 
