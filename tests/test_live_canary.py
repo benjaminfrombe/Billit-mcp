@@ -122,6 +122,7 @@ async def test_run_canary_writes_sanitized_report_without_env_mutation(
 
     report_path = await canary.run_canary(
         output_root=tmp_path,
+        allow_writes=True,
         keychain_reader=lambda service: None,
         client_factory=fake_factory,
     )
@@ -134,6 +135,8 @@ async def test_run_canary_writes_sanitized_report_without_env_mutation(
     assert report["header_proof"]["party_id_header_correct"] is True
     assert report["header_proof"]["party_id_header_name"] == "PartyID"
     assert report["header_proof"]["context_party_id_header_absent"] is True
+    assert report["writes_enabled"] is False
+    assert report["write_override_ignored"] is True
     assert "sandbox-k4k" not in report_path.read_text()
     assert os.environ.get("BILLIT_API_KEY") == before.get("BILLIT_API_KEY")
     assert created_clients[0].settings.api_key == "sandbox-k4k"
