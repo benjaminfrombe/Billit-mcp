@@ -5,9 +5,34 @@ updated: 2026-05-26
 
 # Billit MCP Tool Reference
 
-This page documents the tools registered by the packaged MCP server in
-`src/billit_mcp/server.py`. It does not describe every legacy FastAPI route.
+This page documents the tools registered by the packaged MCP stdio server in
+`src/billit_mcp/server.py` and the curated hosted OAuth MVP in
+`src/billit_mcp/hosted_tools/`. It does not describe every legacy FastAPI route.
 For the HTTP adapter, see [FastAPI Adapter Routes](fastapi-adapter.md).
+
+## Billit MCP Hosted OAuth MVP Tools
+
+Hosted mode exposes only this curated tool surface. It does not register raw
+legacy create/update/delete/webhook/admin tools from `billit/tools/`.
+
+| Hosted tool | Billit endpoint or service | Purpose |
+| --- | --- | --- |
+| `billit.connection_status` | Local OAuth state | Check MCP auth, Billit connection state, and environment. |
+| `billit.list_companies` | Synced account information | List authorized `company_party_id` values. |
+| `billit.search_orders` | `GET /orders` | Search orders from structured allowlisted filters only. |
+| `billit.get_order` | `GET /orders/{order_id}` | Fetch one order after company authorization. |
+| `billit.resolve_party` | `GET /parties` | Resolve a customer or supplier without guessing on ambiguity. |
+| `billit.lookup_peppol_receiver` | `GET /peppol/participantInformation/{identifier}` | Check Peppol receiver visibility. |
+| `billit.invoice.prepare` | Shared local preflight | Validate an invoice draft request without writing. |
+| `billit.invoice.create_draft` | `POST /orders` | Create a sales invoice draft; does not send. |
+| `billit.invoice.prepare_send` | `GET /orders/{order_id}` plus confirmation state | Create a server-owned confirmation challenge. |
+| `billit.invoice.confirm_send` | `POST /orders/commands/send` | Send only after consuming the matching challenge. |
+| `billit.invoice.get_delivery_status` | `GET /orders/{order_id}` | Summarize fresh delivery and payment state. |
+
+Hosted calls must include an explicit `company_party_id`, and the server checks
+that ID against companies synced from Billit account information. Invoice
+sending never accepts a generic `confirmed: true`; the model must use the
+`prepare_send` / `confirm_send` challenge flow.
 
 ## Billit MCP Party Tools
 

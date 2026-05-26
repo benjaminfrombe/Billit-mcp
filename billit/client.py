@@ -51,6 +51,17 @@ class BillitSettings:
 
 
 @dataclass
+class BillitOAuthSettings:
+    """Explicit Billit OAuth configuration for hosted clients."""
+
+    base_url: str
+    access_token: str
+    party_id: str
+    context_party_id: str | None = None
+    rate_limit_per_minute: int | None = None
+
+
+@dataclass
 class RateLimiter:
     """Simple token bucket rate limiter for outgoing requests."""
 
@@ -97,28 +108,36 @@ def get_rate_limiter(rate: int | None = None) -> RateLimiter:
 class BillitAPIClient:
     """Thin wrapper around ``httpx.AsyncClient`` with rate limiting and response handling."""
 
-    def __init__(self, settings: BillitSettings | None = None) -> None:
+    def __init__(self, settings: BillitSettings | BillitOAuthSettings | None = None) -> None:
         """Initialize the client using environment variables for configuration."""
 
         self.settings = settings or BillitSettings.from_env()
         self.base_url = self.settings.base_url
-        self.api_key = self.settings.api_key
         self.party_id = self.settings.party_id
         self.context_party_id = self.settings.context_party_id
         self.rate_limiter = get_rate_limiter(self.settings.rate_limit_per_minute)
 
-        # Set up headers with correct case
-        headers = {
-            "apiKey": self.api_key,
-            "partyID": self.party_id,
-            "Accept": "application/json",
-        }
+        headers = self._headers_for(self.settings)
 
         # Add context party ID if available (for accountants)
         if self.context_party_id:
             headers["ContextPartyID"] = self.context_party_id
 
         self.client = httpx.AsyncClient(base_url=self.base_url, headers=headers, timeout=30.0)
+
+    @staticmethod
+    def _headers_for(settings: BillitSettings | BillitOAuthSettings) -> dict[str, str]:
+        """Build Billit headers for API-key or OAuth authentication."""
+
+        headers = {
+            "partyID": settings.party_id,
+            "Accept": "application/json",
+        }
+        if isinstance(settings, BillitOAuthSettings):
+            headers["Authorization"] = f"Bearer {settings.access_token}"
+        else:
+            headers["apiKey"] = settings.api_key
+        return headers
 
     async def request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
         """Perform a request against the Billit API and wrap the response."""

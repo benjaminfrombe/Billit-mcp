@@ -13,12 +13,19 @@ is the codebase, not older generated plans or historical task logs.
 
 - The canonical runtime is `python -m billit_mcp`.
 - `src/billit_mcp/server.py` is the packaged MCP stdio server.
+- `src/billit_mcp/http_app.py` is the hosted Streamable HTTP app. Run it with
+  `uv run uvicorn billit_mcp.http_app:create_app --factory`.
+- Hosted tools live under `src/billit_mcp/hosted_tools/` and must stay
+  separate from legacy raw FastAPI routes.
 - `server.py` and `billit/tools/` are the legacy FastAPI adapter used for local
   HTTP development and route tests.
 - `billit/client.py` is the only shared Billit REST client. Keep the response
   envelope `{success, data, error, error_code}` stable.
 - Keep credentials in environment variables or macOS Keychain, never in tracked
   files.
+- Hosted mode must not call `BillitSettings.from_env()` and must not use
+  `BILLIT_API_KEY` or process-scoped `BILLIT_PARTY_ID`. It uses Billit OAuth
+  grants plus explicit, synced `company_party_id`.
 
 ## Billit MCP Documentation Rules
 
@@ -40,6 +47,12 @@ uv run ruff check .
 uv run pytest -q
 ```
 
+For hosted runtime changes, also smoke-test:
+
+```bash
+uv run uvicorn billit_mcp.http_app:create_app --factory --host 127.0.0.1 --port 8000
+```
+
 Run live tests only when credentials and environment are intentionally selected:
 
 ```bash
@@ -48,6 +61,8 @@ uv run pytest tests/test_live_integration.py -q --live
 
 That live pytest path is a wrapper around the local read-only canary. Do not add
 separate ad hoc live probes that bypass `scripts/local/live_billit_canary.py`.
+Use `--mode hosted-oauth-readonly` only with a pre-seeded sandbox OAuth grant in
+the local hosted database.
 
 ## Olivier Drafting Voice
 

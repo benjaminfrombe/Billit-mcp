@@ -14,6 +14,15 @@ updated: 2026-05-26
 
 ## DONE
 
+- [x] Implemented the hosted OAuth MCP MVP scaffold (2026-05-26): preserved
+  stdio mode, added Streamable HTTP `/mcp`, MCP OAuth, Billit OAuth grant
+  persistence, company authorization, curated hosted tools, confirmation
+  challenges, redacted audit tables, hosted canary mode, and AWS App Runner
+  Terraform project.
+- [x] Copied and cleaned the downloaded Billit docs snapshot (2026-05-26):
+  regenerated `billit_docs_markdown/` from `/Users/olivierdebeufderijcker/Downloads/billit_docs`,
+  skipped crawler 404/duplicate artifacts, added QMD frontmatter, and grouped
+  164 source pages into category hubs.
 - [x] Implemented the Billit MCP quality remediation and Motium-style CI
   migration (2026-05-26): hermetic tests, MCP lifecycle cleanup, shared
   composite helpers, endpoint drift fixes, uv/Hatch migration, CI gates, and
@@ -58,3 +67,8 @@ updated: 2026-05-26
 - Billit sandbox accepts `/reports` for report listing; `/report` fails.
 - Billit list/composite helpers should cap `$top` at 120; sandbox rejects
   larger values such as `$top=500` for the filtered order queries used here.
+- Keep upstream Billit docs in `billit_docs_markdown/` as source references
+  with QMD frontmatter and category hubs; project behavior belongs in `docs/`.
+- Hosted OAuth mode must stay structurally separate from local API-key mode:
+  no `BillitSettings.from_env()`, no legacy raw tool registration, and every
+  hosted Billit call must validate explicit `company_party_id`.

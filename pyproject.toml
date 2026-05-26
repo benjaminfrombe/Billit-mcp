@@ -23,7 +23,13 @@ dependencies = [
     "pydantic==2.11.5",
     "python-dotenv==1.1.0",
     "python-multipart==0.0.20",
-    "mcp==1.6.0",
+    "mcp==1.27.1",
+    "sqlalchemy[asyncio]>=2.0,<3",
+    "alembic>=1.13,<2",
+    "cryptography>=42",
+    "pyjwt>=2.8,<3",
+    "asyncpg>=0.29,<1",
+    "aiosqlite>=0.20,<1",
 ]
 
 [project.urls]

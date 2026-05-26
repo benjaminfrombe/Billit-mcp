@@ -22,6 +22,12 @@ Run the MCP server:
 uv run python -m billit_mcp
 ```
 
+Run the hosted Streamable HTTP MCP server:
+
+```bash
+uv run uvicorn billit_mcp.http_app:create_app --factory --host 127.0.0.1 --port 8000
+```
+
 Run the legacy FastAPI adapter:
 
 ```bash
@@ -32,6 +38,11 @@ uv run uvicorn server:app --reload
 
 `src/billit_mcp/server.py` is the packaged MCP tool registration file. Add MCP
 tools here only when they should be available to AI clients.
+
+`src/billit_mcp/http_app.py`, `src/billit_mcp/registry.py`, and
+`src/billit_mcp/hosted_tools/` are the hosted OAuth runtime. Hosted tools are
+curated separately and must not import `billit/tools/` or local API-key
+settings.
 
 `billit/tools/` contains FastAPI route modules. Add routes here when local HTTP
 testing or the legacy adapter needs coverage, but remember that this does not
@@ -57,6 +68,7 @@ uv run mypy billit src tests
 uv run lint-imports
 uv run pytest -q
 uv run diff-cover coverage.xml --compare-branch=origin/master --diff-range-notation=... --fail-under=80
+uv build
 ```
 
 Ruff, mypy, import-linter, pytest, coverage, and diff-cover are configured in
@@ -85,9 +97,22 @@ BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
 uv run python scripts/local/live_billit_canary.py --read-only
 ```
 
+Hosted OAuth read-only canary mode uses the local hosted database and requires
+a pre-seeded sandbox Billit OAuth grant. It forces the hosted refresh-token path
+and still performs only Billit reads:
+
+```bash
+BILLIT_SANDBOX_PARTY_ID="$BILLIT_SANDBOX_PARTY_ID" \
+BILLIT_MCP_DATABASE_URL="sqlite+aiosqlite:///.local/billit-mcp-hosted.db" \
+uv run python scripts/local/live_billit_canary.py --read-only --mode hosted-oauth-readonly
+```
+
 For sandbox runs, credential precedence is
 `BILLIT_SANDBOX_API_KEY_K4K`, `BILLIT_SANDBOX_API_KEY`, macOS Keychain service
 `BILLIT_SANDBOX_API_KEY_K4K`, then `BILLIT_API_KEY` as a compatibility fallback.
+Hosted canary mode does not automate Billit login and does not persist tokens,
+API keys, raw customer payloads, raw invoice payloads, file contents, or webhook
+bodies into the evidence report.
 
 ## Billit MCP Documentation Updates
 

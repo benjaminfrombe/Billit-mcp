@@ -1,0 +1,1 @@
+"""Hosted persistence package."""

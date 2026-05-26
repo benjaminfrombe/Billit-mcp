@@ -11,8 +11,9 @@ payments, files, webhooks, Peppol, reports, and utility lookups through a
 standard response envelope.
 
 The packaged runtime is the MCP stdio server in `src/billit_mcp/server.py`.
-The FastAPI app in `server.py` is a legacy local adapter used for HTTP smoke
-tests and route-level development; it is not the primary runtime.
+The hosted OAuth runtime is the Streamable HTTP ASGI app in
+`src/billit_mcp/http_app.py`. The FastAPI app in `server.py` is a legacy local
+adapter used for HTTP smoke tests and route-level development.
 
 ## Billit MCP Runtime Quickstart
 
@@ -46,6 +47,21 @@ LOG_LEVEL=INFO
 
 Use the sandbox by setting `BILLIT_BASE_URL=https://api.sandbox.billit.be/v1`
 and using sandbox credentials. Do not mix sandbox and production API keys.
+
+## Billit MCP Hosted OAuth Runtime
+
+Hosted mode is separate from local API-key stdio mode:
+
+```bash
+uv run uvicorn billit_mcp.http_app:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+It exposes Streamable HTTP MCP at `/mcp`, MCP OAuth metadata and token
+endpoints, and Billit OAuth connect/callback endpoints. Hosted mode uses
+Billit OAuth grants, encrypted token storage, synced company authorization,
+structured filters, and server-owned confirmation challenges for invoice
+sending. It does not register raw legacy FastAPI tools and does not read
+`BILLIT_API_KEY` or process-scoped `BILLIT_PARTY_ID`.
 
 ## Billit MCP Client Configuration
 
@@ -135,8 +151,9 @@ quality gates, live-test safety, Ruff/Pytest commands, and contribution
 expectations.
 
 [Billit API Source Reference](docs/billit-api-reference.md) explains how to
-use the upstream Markdown reference files under `billit_docs_markdown/` without
-confusing them with project implementation docs.
+use the QMD-ready upstream Markdown reference files under
+`billit_docs_markdown/` without confusing them with project implementation
+docs.
 
 ## Billit MCP Development Commands
 
@@ -164,17 +181,28 @@ BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
 uv run python scripts/local/live_billit_canary.py --read-only
 ```
 
+Run the hosted OAuth read-only canary only after seeding a sandbox Billit OAuth
+grant in the local hosted database:
+
+```bash
+BILLIT_SANDBOX_PARTY_ID="$BILLIT_SANDBOX_PARTY_ID" \
+uv run python scripts/local/live_billit_canary.py --read-only --mode hosted-oauth-readonly
+```
+
 ## Billit MCP Repository Layout
 
 ```text
-src/billit_mcp/          Packaged MCP stdio server.
+src/billit_mcp/          Packaged MCP stdio server and hosted OAuth runtime.
+src/billit_mcp/auth/     MCP OAuth and Billit OAuth bridge services.
+src/billit_mcp/hosted_tools/ Curated hosted OAuth-safe MCP tools.
+src/billit_mcp/persistence/  Hosted SQLAlchemy models and database helpers.
 billit/client.py         Shared async Billit REST client and response envelope.
 billit/dependencies.py   FastAPI dependency factory and request-scoped cleanup.
 billit/services/         Shared adapter-neutral business helpers.
 billit/smart_search.py   Shared local scoring for orders, parties, and products.
 billit/tools/            Legacy FastAPI route modules.
 billit/models/           Pydantic request/response models used by route modules.
-billit_docs_markdown/    Upstream Billit API reference snapshots.
+billit_docs_markdown/    QMD-ready upstream Billit API reference snapshots.
 docs/                    Current project documentation.
 scripts/local/           Local-only canaries and verification helpers.
 tests/                   Unit, route, integration, and live-test suites.

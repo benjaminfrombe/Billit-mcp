@@ -1,0 +1,1 @@
+"""Curated hosted MCP tools."""

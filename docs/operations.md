@@ -26,6 +26,16 @@ The MCP process communicates over stdio and will appear idle when started by
 hand. That is normal; it is waiting for an MCP client to send protocol
 messages.
 
+Run the hosted OAuth ASGI app locally:
+
+```bash
+uv run uvicorn billit_mcp.http_app:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+Hosted mode exposes `/mcp`, OAuth metadata and token endpoints, Billit OAuth
+connect/callback endpoints, `/healthz`, and `/readyz`. It uses the hosted
+database configured by `BILLIT_MCP_DATABASE_URL`.
+
 ## Billit MCP Docker Operation
 
 Build and run the MCP stdio server:
@@ -37,6 +47,12 @@ docker run --rm -i --env-file .env billit-mcp
 
 Do not publish Docker images that bake in `.env` files. Pass credentials at
 runtime through environment variables or a secret manager.
+
+For hosted containers, override the default stdio command with:
+
+```bash
+uvicorn billit_mcp.http_app:create_app --factory --host 0.0.0.0 --port 8000
+```
 
 ## Billit MCP PyPI Packaging
 
@@ -99,10 +115,32 @@ BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
 uv run python scripts/local/live_billit_canary.py --read-only
 ```
 
+Hosted OAuth mode requires a sandbox Billit OAuth grant already stored in the
+local hosted database. It does not automate Billit login:
+
+```bash
+BILLIT_SANDBOX_PARTY_ID="$BILLIT_SANDBOX_PARTY_ID" \
+uv run python scripts/local/live_billit_canary.py --read-only --mode hosted-oauth-readonly
+```
+
 Do not commit `.local/` canary evidence. The report intentionally excludes API
 keys, customer names, emails, invoice bodies, and raw Billit response payloads.
 The canary refuses non-GET probes unless `BILLIT_LIVE_CANARY_ALLOW_WRITES=1`,
 and no write probes are registered in the current canary.
+
+## Billit MCP AWS Hosting
+
+The Terraform project for the hosted OAuth MVP lives at:
+
+```text
+/Users/olivierdebeufderijcker/Desktop/motium_github/olivier-aws-infra/projects/billit-mcp
+```
+
+It provisions App Runner, ECR, private RDS Postgres, Secrets Manager secret
+containers, Route53 custom-domain records, CloudWatch retention/alarm,
+private-subnet VPC connector, and NAT-backed public egress for Billit API
+calls. Terraform creates secret containers only; populate secret values outside
+Terraform so application secrets do not enter state.
 
 ## Billit MCP Troubleshooting Startup Failures
 

@@ -82,3 +82,14 @@ jobs:
           if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
             exit "$status"
           fi
+      - name: Bounded hosted ASGI startup smoke
+        run: |
+          set +e
+          BILLIT_MCP_PUBLIC_BASE_URL=http://127.0.0.1:8799 \
+          BILLIT_MCP_DATABASE_URL=sqlite+aiosqlite:///.local/billit-mcp-ci.db \
+          timeout 5s uv run uvicorn billit_mcp.http_app:create_app --factory --host 127.0.0.1 --port 8799
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            exit "$status"
+          fi

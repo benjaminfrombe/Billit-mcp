@@ -16,7 +16,8 @@ truth.
 Start with [Project Overview and Quickstart](../README.md), then read
 [Architecture and Data Flow](architecture.md). Together they explain the
 runtime split between the packaged MCP server and the legacy FastAPI adapter,
-the shared response envelope, and the directories you will edit most often.
+the shared response envelope, the hosted OAuth runtime, and the directories you
+will edit most often.
 
 After that, read [Development and Testing](development-testing.md). It explains
 the required Ruff and Pytest gates, how tests mock Billit API calls, and when
@@ -32,6 +33,10 @@ loads at startup.
 Then read [MCP Tool Reference](mcp-tools.md). It lists each registered MCP tool,
 what Billit endpoint it forwards to, and current gotchas such as PascalCase
 payload fields and composite helper limitations.
+
+For hosted connector work, use [Architecture and Data Flow](architecture.md)
+as the entry point. Hosted mode is intentionally separate from the legacy raw
+FastAPI adapter and exposes only the curated OAuth-safe MVP tool set.
 
 ## Billit MCP Start Here for Operators
 
