@@ -75,6 +75,7 @@ jobs:
         run: uv build
       - name: Prepare hosted smoke database
         run: |
+          mkdir -p .local
           BILLIT_MCP_DATABASE_URL=sqlite+aiosqlite:///.local/billit-mcp-ci.db \
           uv run python -m billit_mcp.persistence.migrations
       - name: Bounded MCP startup smoke
