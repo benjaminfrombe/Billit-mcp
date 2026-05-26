@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, UploadFile
 
 from ..client import BillitAPIClient
 from ..dependencies import get_client
+from ..endpoints import FINANCIAL_TRANSACTIONS_ENDPOINT
 
 router = APIRouter()
 
@@ -18,10 +19,10 @@ async def list_financial_transactions(
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Retrieve bank transactions."""
-    params = {"$skip": skip, "$top": top}
+    params: dict[str, Any] = {"$skip": skip, "$top": top}
     if odata_filter:
         params["$filter"] = odata_filter
-    return await client.request("GET", "/financialTransactions", params=params)
+    return await client.request("GET", FINANCIAL_TRANSACTIONS_ENDPOINT, params=params)
 
 
 @router.post("/financial-transactions/import")
@@ -31,7 +32,11 @@ async def import_transactions_file(
 ) -> dict[str, Any]:
     """Upload a bank statement file."""
     files = {"file": (file.filename, await file.read())}
-    return await client.request("POST", "/financialTransactions/importFile", files=files)
+    return await client.request(
+        "POST",
+        f"{FINANCIAL_TRANSACTIONS_ENDPOINT}/importFile",
+        files=files,
+    )
 
 
 @router.post("/financial-transactions/{import_id}/confirm")
@@ -40,4 +45,4 @@ async def confirm_transaction_import(
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Confirm a transaction file import."""
-    return await client.request("POST", "/financialTransactions/commands/import")
+    return await client.request("POST", f"{FINANCIAL_TRANSACTIONS_ENDPOINT}/commands/import")

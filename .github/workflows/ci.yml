@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: "0.7.12"
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Format check
+        run: uv run ruff format --check .
+      - name: Lint
+        run: uv run ruff check .
+      - name: Type check
+        run: uv run mypy billit src tests
+      - name: Architecture enforcement
+        run: uv run lint-imports
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: "0.7.12"
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Tests
+        run: >
+          uv run pytest -q
+          --cov=billit
+          --cov=src/billit_mcp
+          --cov-report=term-missing
+          --cov-report=xml
+      - name: Coverage on changed files
+        run: >
+          uv run diff-cover coverage.xml
+          --compare-branch=origin/master
+          --diff-range-notation=...
+          --fail-under=80
+
+  package:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: "0.7.12"
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Build package
+        run: uv build
+      - name: Bounded MCP startup smoke
+        run: |
+          set +e
+          timeout 5s uv run python -m billit_mcp < /dev/null
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            exit "$status"
+          fi

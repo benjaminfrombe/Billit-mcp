@@ -99,15 +99,14 @@ are not currently MCP tools.
 | --- | --- | --- |
 | `smart_search` | Local helper plus `/orders`, `/parties`, `/products` | Search Billit records using local scoring. |
 | `debug_smart_search` | Local helper plus `/orders`, `/parties`, `/products` | Return search results with parsed debug metadata. |
-| `suggest_payment_reconciliation` | `GET /ai/suggest-payment-reconciliation` | Legacy wrapper; currently points at an AI route path, not a known Billit REST path. |
-| `generate_invoice_summary` | `GET /ai/invoice-summary` | Legacy wrapper; FastAPI has local implementation. |
-| `list_overdue_invoices` | `GET /ai/overdue-invoices` | Legacy wrapper; FastAPI has local implementation. |
-| `get_cashflow_overview` | `GET /ai/cashflow` | Legacy wrapper; FastAPI has local implementation. |
+| `suggest_payment_reconciliation` | Local helper plus `/orders`, `/financialTransactions` | Match open invoices to bank transactions. |
+| `generate_invoice_summary` | Local helper plus `/orders` | Summarize sales invoices for a date range. |
+| `list_overdue_invoices` | Local helper plus `/orders` | List overdue sales invoice IDs. |
+| `get_cashflow_overview` | Local helper plus `/orders` | Summarize income, costs, and net cashflow for a period. |
 | `search_company` | `GET /misc/companysearch/{keywords}` | Search public company data through Billit. |
 | `get_type_codes` | `GET /misc/typecodes/{code_type}` | Retrieve Billit system code lists. |
 | `list_available_reports` | `GET /reports` | List report types. |
 | `get_report` | `GET /reports/{report_id}` | Retrieve a report with optional query parameters. |
 
-Do not assume the legacy AI wrappers work against the public Billit REST API.
-Use `smart_search` for the currently shared local composite path, or call the
-FastAPI adapter if you intentionally need the local AI route implementations.
+Composite helpers are implemented locally in shared service modules. They do
+not call local `/ai/...` FastAPI paths through the Billit REST client.

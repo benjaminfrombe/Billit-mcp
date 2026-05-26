@@ -12,7 +12,7 @@ manual Swagger checks, and validating route-level request parsing.
 Run it locally with:
 
 ```bash
-poetry run uvicorn server:app --reload
+uv run uvicorn server:app --reload
 ```
 
 ## Billit MCP FastAPI Route Table

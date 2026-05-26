@@ -10,22 +10,22 @@ changes before release.
 
 ## Billit MCP Development Setup
 
-Install dependencies with Poetry:
+Install dependencies with uv:
 
 ```bash
-poetry install
+uv sync --locked
 ```
 
 Run the MCP server:
 
 ```bash
-poetry run python -m billit_mcp
+uv run python -m billit_mcp
 ```
 
 Run the legacy FastAPI adapter:
 
 ```bash
-poetry run uvicorn server:app --reload
+uv run uvicorn server:app --reload
 ```
 
 ## Billit MCP Source Layout for Contributors
@@ -40,6 +40,9 @@ automatically add an MCP tool.
 `billit/client.py` contains the shared REST client. Changes here affect both
 MCP tools and the FastAPI adapter.
 
+`billit/services/` contains adapter-neutral composite helpers shared by MCP
+tools, canaries, and FastAPI routes.
+
 `billit/smart_search.py` contains reusable local search scoring. Keep this
 logic independent from FastAPI so MCP and HTTP routes can share it.
 
@@ -48,24 +51,39 @@ logic independent from FastAPI so MCP and HTTP routes can share it.
 Run:
 
 ```bash
-poetry run ruff check .
-poetry run pytest -q
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy billit src tests
+uv run lint-imports
+uv run pytest -q
+uv run diff-cover coverage.xml --compare-branch=origin/master --diff-range-notation=... --fail-under=80
 ```
 
-Ruff is configured in `pyproject.toml` with `E` and `F` rules and a 100
-character line length. Do not introduce broad lint exclusions without a clear
-reason.
+Ruff, mypy, import-linter, pytest, coverage, and diff-cover are configured in
+`pyproject.toml`. Do not introduce broad exclusions without a clear reason.
 
 ## Billit MCP Test Types
 
-Unit and route tests are the default. They monkeypatch `BillitAPIClient.request`
-or use `respx` so they do not need credentials.
+Unit and route tests are the default. Normal pytest sets fake Billit env vars
+and fails any unmocked `BillitAPIClient.request` call. Tests must monkeypatch
+the client request method, use `respx`, or be marked live.
 
 Live tests are skipped unless `--live` is passed. They require real Billit
 credentials and should normally use sandbox.
 
 ```bash
-poetry run pytest tests/test_live_integration.py -q --live
+uv run pytest tests/test_live_integration.py -q --live
+```
+
+The local live-data canary is separate from pytest and CI. It defaults to
+sandbox, reads the sandbox key from env or macOS Keychain, performs read-only
+probes, and writes sanitized evidence under `.local/`:
+
+```bash
+BILLIT_API_KEY="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
+BILLIT_BASE_URL=https://api.sandbox.billit.be/v1 \
+BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
+uv run python scripts/local/live_billit_canary.py --read-only
 ```
 
 ## Billit MCP Documentation Updates

@@ -40,6 +40,8 @@ Documentation exists for every major code area:
 - `billit/client.py`: documented in `docs/architecture.md`,
   `docs/configuration.md`, and `docs/operations.md`.
 - `billit/dependencies.py`: documented in `docs/architecture.md`.
+- `billit/services/`: documented in `docs/architecture.md`,
+  `docs/development-testing.md`, and `docs/mcp-tools.md`.
 - `billit/smart_search.py`: documented in `docs/architecture.md` and
   `docs/mcp-tools.md`.
 - `billit/tools/`: documented in `docs/fastapi-adapter.md`.
@@ -89,9 +91,9 @@ Some upstream Billit reference pages are intentionally short because they mirror
 single upstream topics such as HTTP status codes. They now have frontmatter, but
 they may still produce weaker standalone embeddings than the project docs.
 
-Some packaged MCP composite tools still forward to `/ai/...` paths that are
-implemented only by the local FastAPI adapter. The docs now call this out, but
-the implementation should eventually be rewired or removed.
+Packaged MCP composite tools now call shared local service helpers instead of
+forwarding `/ai/...` paths through the Billit REST client. Keep
+`docs/mcp-tools.md` synchronized if new composite helpers are added.
 
 The package metadata in `pyproject.toml` should stay aligned with the public
 GitHub owner. Documentation references and package URLs were updated as part of
@@ -103,7 +105,7 @@ The final repository documentation set contains 67 non-ignored Markdown files.
 Every maintained Markdown file has `title` and `updated` frontmatter, and local
 Markdown links resolve.
 
-Validation commands run:
+Historical validation commands from the documentation refresh:
 
 - `poetry install`
 - `poetry run ruff check .`

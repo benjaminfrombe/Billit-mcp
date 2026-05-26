@@ -15,7 +15,7 @@ or mock outbound HTTP with `respx`.
 Run the standard gate:
 
 ```bash
-poetry run pytest -q
+uv run pytest -q
 ```
 
 The standard suite includes route tests for accounts, accountant feeds, AI
@@ -28,19 +28,20 @@ Live tests are collected but skipped unless `--live` is provided.
 Run Ruff before committing:
 
 ```bash
-poetry run ruff check .
+uv run ruff format --check .
+uv run ruff check .
 ```
 
-Ruff currently enforces `E` and `F` rules with a 100-character line length.
-Keep documentation examples readable, but do not weaken lint config for test or
-implementation shortcuts.
+Ruff uses the repository's Motium-style selector set in `pyproject.toml`.
+Keep documentation examples readable, but do not weaken lint config for test
+or implementation shortcuts.
 
 ## Billit MCP Live Integration Tests
 
 Live tests are read-oriented checks against a real Billit account:
 
 ```bash
-poetry run pytest tests/test_live_integration.py -q --live
+uv run pytest tests/test_live_integration.py -q --live
 ```
 
 Use sandbox credentials by default:
@@ -68,6 +69,10 @@ async def fake_request(self, method, endpoint, **kwargs):
 
 monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
 ```
+
+Normal tests install a guard that fails unmocked `BillitAPIClient.request`
+calls. Direct client tests that intentionally exercise the request method must
+use `respx` and the `allow_billit_request` marker.
 
 For direct client tests, set `BILLIT_API_KEY`, `BILLIT_BASE_URL`, and
 `BILLIT_PARTY_ID` with `monkeypatch.setenv`, then mock HTTP responses with

@@ -1,8 +1,10 @@
 import os
-import pytest
-from httpx import AsyncClient, ASGITransport
 
+import pytest
+from httpx import ASGITransport, AsyncClient
 from server import app
+
+pytestmark = pytest.mark.live
 
 sandbox_key = os.getenv("BILLIT_API_KEY")
 

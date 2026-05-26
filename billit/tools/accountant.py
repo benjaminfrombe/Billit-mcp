@@ -15,10 +15,7 @@ async def register_feed(
     data: dict[str, Any], client: BillitAPIClient = Depends(get_client)
 ) -> dict[str, Any]:
     """Create a new feed subscription."""
-    feed_data = {
-        "FeedName": data.get("feed_name"),
-        "FeedType": data.get("feed_type")
-    }
+    feed_data = {"FeedName": data.get("feed_name"), "FeedType": data.get("feed_type")}
     return await client.request("POST", "/feed", json=feed_data)
 
 

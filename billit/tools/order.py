@@ -18,7 +18,7 @@ async def list_orders(
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Retrieve a list of orders."""
-    params = {"$skip": skip, "$top": top}
+    params: dict[str, Any] = {"$skip": skip, "$top": top}
     if odata_filter:
         params["$filter"] = odata_filter
     return await client.request("GET", "/orders", params=params)
@@ -54,17 +54,17 @@ async def update_order(
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Update patchable properties of an existing order.
-    
+
     IMPORTANT: Only these fields can be updated after order creation:
-    - Paid, PaidDate, IsSent, ApprovalStatus, AccountCode, 
+    - Paid, PaidDate, IsSent, ApprovalStatus, AccountCode,
     - InternalInfo, Invoiced, AccountantVerificationNeeded
-    
+
     CANNOT be updated after creation (requires new order):
     - VentilationCode (VAT classification like IC Services)
     - VATType, VAT percentages on OrderLines
     - Customer information, OrderLines content
     - OrderDate, ExpiryDate, Currency
-    
+
     Use 'InternalInfo' field for comments/notes, not 'Comments'.
     """
     allowed_patch_fields = {
@@ -91,7 +91,7 @@ async def update_order(
             ),
             "error_code": "INVALID_PATCH_FIELDS",
         }
-    
+
     return await client.request("PATCH", f"/orders/{order_id}", json=order_updates)
 
 
@@ -119,14 +119,14 @@ async def send_order(
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Send one or more orders via specified transport.
-    
+
     Expected JSON body format:
     {
         "order_ids": [123, 456],
         "transport_type": "SMTP",
         "strict_transport": false
     }
-    
+
     Valid transport types:
     - SMTP: Email delivery (requires valid customer email)
     - Peppol: Peppol e-invoicing network
@@ -136,17 +136,17 @@ async def send_order(
     - OSA: Hungarian network
     - ANAF: Romanian network
     - SAT: Mexican network
-    
+
     Important behaviors:
     - Peppol is tried first if customer is registered on network
     - If Peppol fails, fallback to email (unless strict_transport=true)
     - Email fallback requires valid customer email address
     - Set strict_transport=true to prevent fallbacks and enforce exact transport
-    
+
     Common errors:
     - "TheCustomer_0_DoesNotHaveAValidEmailAddress": Update customer email first
     - Order must be in correct status (ToSend, not already Sent)
-    
+
     Note: 'Email' auto-corrected to 'SMTP'
     """
     valid_transport_types = {"SMTP", "Peppol", "Letter", "SDI", "KSeF", "OSA", "ANAF", "SAT"}
@@ -155,7 +155,7 @@ async def send_order(
     order_ids = send_data.get("order_ids", [])
     transport_type = send_data.get("transport_type", "")
     strict_transport = send_data.get("strict_transport", False)
-    
+
     # Validate required fields
     if not order_ids:
         return {
@@ -164,7 +164,7 @@ async def send_order(
             "error": "order_ids is required and must not be empty",
             "error_code": "MISSING_ORDER_IDS",
         }
-    
+
     if not transport_type:
         return {
             "success": False,
@@ -172,11 +172,11 @@ async def send_order(
             "error": "transport_type is required",
             "error_code": "MISSING_TRANSPORT_TYPE",
         }
-    
+
     # Auto-correct common mistakes
     if transport_type == "Email":
         transport_type = "SMTP"
-    
+
     # Validate transport type
     if transport_type not in valid_transport_types:
         return {
@@ -188,13 +188,13 @@ async def send_order(
             ),
             "error_code": "INVALID_TRANSPORT_TYPE",
         }
-    
+
     # Prepare data for Billit API
     data = {
         "Transporttype": transport_type,
         "OrderIDs": order_ids,
     }
-    
+
     # Add the StrictTransportType header if requested
     headers = {}
     if strict_transport:

@@ -16,6 +16,15 @@ updated: 2026-05-26
 
 ## DONE
 
+- [x] Implemented the Billit MCP quality remediation and Motium-style CI
+  migration (2026-05-26): hermetic tests, MCP lifecycle cleanup, shared
+  composite helpers, endpoint drift fixes, uv/Hatch migration, CI gates, and
+  documentation updates.
+- [x] Added and ran the local read-only live-data Billit sandbox canary
+  (2026-05-26): sanitized evidence written under ignored `.local/` with
+  `/reports`, `/financialTransactions`, and shared composite helper proof.
+- [x] Wrote the end-to-end quality remediation plan and concise `/goal` prompt
+  (2026-05-26), including the local live-data canary acceptance gate.
 - [x] Full repository documentation refresh from the current codebase
   (2026-05-26): rewrote public docs, removed stale/private docs, added
   code-derived architecture/runtime/testing/operations docs, and added
@@ -41,3 +50,8 @@ updated: 2026-05-26
 - Public docs should point at `https://github.com/olivier-motium/Billit-mcp`.
 - A freshly created Poetry environment may exist but be empty; run
   `poetry install` before interpreting pytest import errors.
+- The remediation canary must use live Billit data locally, write only
+  sanitized evidence under `.local/`, and stay out of CI/default pytest.
+- Billit sandbox accepts `/reports` for report listing; `/report` fails.
+- Billit list/composite helpers should cap `$top` at 120; sandbox rejects
+  larger values such as `$top=500` for the filtered order queries used here.

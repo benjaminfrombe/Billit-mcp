@@ -5,7 +5,6 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from server import app
 
 

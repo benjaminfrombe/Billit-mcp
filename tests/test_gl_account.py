@@ -2,7 +2,6 @@
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from server import app
 
 
@@ -15,12 +14,12 @@ async def test_create_gl_account(monkeypatch):
             "AccountID": 123,
             "AccountCode": "4000",
             "AccountName": "Sales Revenue",
-            "AccountType": "Income"
+            "AccountType": "Income",
         },
         "error": None,
-        "error_code": None
+        "error_code": None,
     }
-    
+
     async def fake_request(self, method, endpoint, **kwargs):
         assert method == "POST"
         assert endpoint == "/glAccount"
@@ -28,15 +27,18 @@ async def test_create_gl_account(monkeypatch):
         assert data["account_code"] == "4000"
         assert data["account_name"] == "Sales Revenue"
         return expected_response
-    
+
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post("/gl-accounts", json={
-            "account_code": "4000",
-            "account_name": "Sales Revenue",
-            "account_type": "Income"
-        })
+        response = await client.post(
+            "/gl-accounts",
+            json={
+                "account_code": "4000",
+                "account_name": "Sales Revenue",
+                "account_type": "Income",
+            },
+        )
         assert response.status_code == 200
         assert response.json() == expected_response
 
@@ -52,22 +54,22 @@ async def test_import_gl_accounts(monkeypatch):
             "Results": [
                 {"AccountCode": "4000", "Status": "Success"},
                 {"AccountCode": "5000", "Status": "Success"},
-                {"AccountCode": "6000", "Status": "Success"}
-            ]
+                {"AccountCode": "6000", "Status": "Success"},
+            ],
         },
         "error": None,
-        "error_code": None
+        "error_code": None,
     }
-    
+
     async def fake_request(self, method, endpoint, **kwargs):
         assert method == "POST"
         assert endpoint == "/glAccount/import"
         data = kwargs.get("json", [])
         assert len(data) == 3
         return expected_response
-    
+
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/gl-accounts/import",
@@ -98,40 +100,43 @@ async def test_import_journal_entries(monkeypatch):
             "ImportedCount": 2,
             "TotalDebit": 5000.00,
             "TotalCredit": 5000.00,
-            "JournalIDs": ["JE-001", "JE-002"]
+            "JournalIDs": ["JE-001", "JE-002"],
         },
         "error": None,
-        "error_code": None
+        "error_code": None,
     }
-    
+
     async def fake_request(self, method, endpoint, **kwargs):
         assert method == "POST"
         assert endpoint == "/journalEntry/import"
         data = kwargs.get("json", [])
         assert len(data) == 2
         return expected_response
-    
+
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post("/journal-entries/import", json=[
+        response = await client.post(
+            "/journal-entries/import",
+            json=[
                 {
                     "entry_date": "2024-01-15",
                     "description": "Sales entry",
                     "lines": [
                         {"account_code": "1200", "debit": 2500.00, "credit": 0},
-                        {"account_code": "4000", "debit": 0, "credit": 2500.00}
-                    ]
+                        {"account_code": "4000", "debit": 0, "credit": 2500.00},
+                    ],
                 },
                 {
                     "entry_date": "2024-01-16",
                     "description": "Expense entry",
                     "lines": [
                         {"account_code": "6000", "debit": 2500.00, "credit": 0},
-                        {"account_code": "1000", "debit": 0, "credit": 2500.00}
-                    ]
-                }
-        ])
+                        {"account_code": "1000", "debit": 0, "credit": 2500.00},
+                    ],
+                },
+            ],
+        )
         assert response.status_code == 200
         assert response.json() == expected_response
 
@@ -143,18 +148,17 @@ async def test_gl_account_error_handling(monkeypatch):
         "success": False,
         "data": None,
         "error": "Account code already exists",
-        "error_code": "DUPLICATE_ACCOUNT"
+        "error_code": "DUPLICATE_ACCOUNT",
     }
-    
+
     async def fake_request(self, method, endpoint, **kwargs):
         return error_response
-    
+
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post("/gl-accounts", json={
-            "account_code": "4000",
-            "account_name": "Sales Revenue"
-        })
+        response = await client.post(
+            "/gl-accounts", json={"account_code": "4000", "account_name": "Sales Revenue"}
+        )
         assert response.status_code == 200
         assert response.json() == error_response

@@ -28,9 +28,7 @@ async def create_party(
 
 
 @router.get("/parties/{party_id}")
-async def get_party(
-    party_id: int, client: BillitAPIClient = Depends(get_client)
-) -> dict[str, Any]:
+async def get_party(party_id: int, client: BillitAPIClient = Depends(get_client)) -> dict[str, Any]:
     """Retrieve a single party by ID."""
 
     return await client.request("GET", f"/parties/{party_id}")
@@ -41,13 +39,13 @@ async def update_party(
     party_id: int, updates: PartyUpdate, client: BillitAPIClient = Depends(get_client)
 ) -> dict[str, Any]:
     """Apply partial updates to an existing party (customer/supplier).
-    
+
     Supports updating all patchable fields including:
     - Contact info: Name, Email, Phone, Mobile, Fax
     - Address: Street, City, Zipcode, CountryCode, etc.
     - Business: VATNumber, IBAN, CommercialName
     - Accounting: GLAccountCode, VATLiable
-    
+
     All fields are optional for PATCH operations.
     """
     return await client.request(
@@ -64,11 +62,11 @@ async def update_party_raw(
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Apply raw partial updates to an existing party.
-    
+
     Alternative endpoint that accepts a raw dict for maximum flexibility.
     Use PascalCase field names (e.g., "Email", "VATNumber", "ContactFirstName").
-    
-    Common fields: Name, Email, Phone, VATNumber, Street, City, Zipcode, 
+
+    Common fields: Name, Email, Phone, VATNumber, Street, City, Zipcode,
     CountryCode, CommercialName, ContactFirstName, ContactLastName, etc.
     """
     allowed_patch_fields = {
@@ -110,5 +108,5 @@ async def update_party_raw(
             ),
             "error_code": "INVALID_PATCH_FIELDS",
         }
-    
+
     return await client.request("PATCH", f"/parties/{party_id}", json=updates)

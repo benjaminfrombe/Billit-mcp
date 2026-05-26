@@ -5,32 +5,27 @@ set -e
 
 echo "Starting Billit MCP server environment setup..."
 
-# Check if poetry is installed
-if ! command -v poetry &> /dev/null
+# Check if uv is installed
+if ! command -v uv &> /dev/null
 then
-    echo "Poetry could not be found. Please install it first."
-    echo "See: https://python-poetry.org/docs/#installation"
+    echo "uv could not be found. Please install it first."
+    echo "See: https://docs.astral.sh/uv/getting-started/installation/"
     exit 1
 fi
 
-# 1. Verify Poetry project is properly configured
+# 1. Verify project configuration
 if [ ! -f pyproject.toml ]; then
     echo "No pyproject.toml found. Please ensure you're in the correct directory."
     exit 1
 else
-    echo "Poetry project configuration found."
+    echo "Project configuration found."
 fi
 
-# 2. Configure Poetry to create the virtual environment in the project's root
-echo "🐍 Configuring virtual environment..."
-poetry config virtualenvs.in-project true
+# 2. Install dependencies from the committed lock file
+echo "Installing dependencies..."
+uv sync --locked
 
-# 3. Update lock file and install dependencies
-echo "📦 Updating lock file and installing dependencies..."
-poetry lock
-poetry install
-
-# 4. Create the .env file from the template if it doesn't exist
+# 3. Create the .env file from the template if it doesn't exist
 if [ ! -f .env ]; then
     echo "Creating .env file..."
     cat > .env << EOL
@@ -60,5 +55,5 @@ if [ -f .env ]; then
 else
     echo "1. .env file already configured."
 fi
-echo "2. Run the MCP server with: poetry run billit-mcp"
-echo "3. For the legacy FastAPI adapter, run: poetry run uvicorn server:app --reload"
+echo "2. Run the MCP server with: uv run billit-mcp"
+echo "3. For the legacy FastAPI adapter, run: uv run uvicorn server:app --reload"

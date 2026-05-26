@@ -5,8 +5,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from billit.endpoints import MAX_PAGE_SIZE
+
+if TYPE_CHECKING:
+    from billit.protocols import BillitRequester
 
 ENTITY_TYPES = {"orders", "parties", "products", "all"}
 STOP_WORDS = {"the", "and", "for", "with", "from", "in", "on", "at", "to", "of", "a", "an"}
@@ -131,7 +135,7 @@ def score_product(product: dict[str, Any], terms: SearchTerms) -> tuple[float, l
 
 
 async def run_smart_search(
-    client: Any,
+    client: BillitRequester,
     query: str,
     entity_type: str = "all",
     max_results: int = 10,
@@ -150,7 +154,7 @@ async def run_smart_search(
     results: list[dict[str, Any]] = []
 
     if entity_type in {"orders", "all"}:
-        orders_resp = await client.request("GET", "/orders", params={"$top": 500})
+        orders_resp = await client.request("GET", "/orders", params={"$top": MAX_PAGE_SIZE})
         if not orders_resp.get("success"):
             return orders_resp
         for order in normalize_items(orders_resp.get("data")):
@@ -161,7 +165,7 @@ async def run_smart_search(
                 )
 
     if entity_type in {"parties", "all"}:
-        parties_resp = await client.request("GET", "/parties", params={"$top": 500})
+        parties_resp = await client.request("GET", "/parties", params={"$top": MAX_PAGE_SIZE})
         if not parties_resp.get("success"):
             return parties_resp
         for party in normalize_items(parties_resp.get("data")):
@@ -172,7 +176,7 @@ async def run_smart_search(
                 )
 
     if entity_type in {"products", "all"}:
-        products_resp = await client.request("GET", "/products", params={"$top": 500})
+        products_resp = await client.request("GET", "/products", params={"$top": MAX_PAGE_SIZE})
         if not products_resp.get("success"):
             return products_resp
         for product in normalize_items(products_resp.get("data")):

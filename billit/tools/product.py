@@ -21,7 +21,7 @@ async def list_products(
 ) -> dict[str, Any]:
     """List products with optional OData filter and pagination."""
 
-    params = {"$skip": skip, "$top": top}
+    params: dict[str, Any] = {"$skip": skip, "$top": top}
     if odata_filter:
         params["$filter"] = odata_filter
     return await client.request("GET", "/products", params=params)

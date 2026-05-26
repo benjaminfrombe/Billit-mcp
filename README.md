@@ -28,8 +28,8 @@ For local development:
 ```bash
 git clone https://github.com/olivier-motium/Billit-mcp.git
 cd Billit-mcp
-poetry install
-poetry run python -m billit_mcp
+uv sync --locked
+uv run python -m billit_mcp
 ```
 
 The server reads credentials from environment variables. A `.env` file is
@@ -85,8 +85,7 @@ The packaged MCP server currently registers 44 tools:
 - Documents: list, upload, inspect, and download Billit files.
 - Webhooks: create, list, delete, and refresh webhook secrets.
 - Peppol: participant lookup, participant registration, and order sending.
-- AI/composite helpers: local smart search plus several legacy remote-style
-  composite wrappers.
+- AI/composite helpers: local smart search plus shared local composite helpers.
 - Utilities and reports: company search, type codes, report list, and report
   retrieval.
 
@@ -142,17 +141,28 @@ confusing them with project implementation docs.
 ## Billit MCP Development Commands
 
 ```bash
-poetry install
-poetry run ruff check .
-poetry run pytest -q
-poetry run python -m billit_mcp
-poetry run uvicorn server:app --reload
+uv sync --locked
+uv run ruff format --check .
+uv run ruff check .
+uv run pytest -q
+uv run python -m billit_mcp
+uv run uvicorn server:app --reload
 ```
 
 Run live integration tests only with safe credentials:
 
 ```bash
-poetry run pytest tests/test_live_integration.py -q --live
+uv run pytest tests/test_live_integration.py -q --live
+```
+
+Run the local read-only live canary against sandbox when validating endpoint
+drift or shared composite helpers:
+
+```bash
+BILLIT_API_KEY="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
+BILLIT_BASE_URL=https://api.sandbox.billit.be/v1 \
+BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
+uv run python scripts/local/live_billit_canary.py --read-only
 ```
 
 ## Billit MCP Repository Layout
@@ -161,11 +171,13 @@ poetry run pytest tests/test_live_integration.py -q --live
 src/billit_mcp/          Packaged MCP stdio server.
 billit/client.py         Shared async Billit REST client and response envelope.
 billit/dependencies.py   FastAPI dependency factory and request-scoped cleanup.
+billit/services/         Shared adapter-neutral business helpers.
 billit/smart_search.py   Shared local scoring for orders, parties, and products.
 billit/tools/            Legacy FastAPI route modules.
 billit/models/           Pydantic request/response models used by route modules.
 billit_docs_markdown/    Upstream Billit API reference snapshots.
 docs/                    Current project documentation.
+scripts/local/           Local-only canaries and verification helpers.
 tests/                   Unit, route, integration, and live-test suites.
 ```
 

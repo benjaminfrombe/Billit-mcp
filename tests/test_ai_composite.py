@@ -2,7 +2,6 @@
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from server import app
 
 
@@ -26,7 +25,7 @@ async def test_suggest_payment_reconciliation(monkeypatch):
                 "error": None,
                 "error_code": None,
             }
-        elif endpoint == "/financialTransaction":
+        elif endpoint == "/financialTransactions":
             return {
                 "success": True,
                 "data": [
@@ -42,7 +41,7 @@ async def test_suggest_payment_reconciliation(monkeypatch):
         raise AssertionError(f"Unexpected endpoint: {endpoint}")
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/ai/suggest-payment-reconciliation")
         assert response.status_code == 200
@@ -77,7 +76,7 @@ async def test_generate_invoice_summary(monkeypatch):
         }
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/ai/invoice-summary?start_date=2024-01-01&end_date=2024-12-31")
         assert response.status_code == 200
@@ -113,7 +112,7 @@ async def test_generate_expense_summary(monkeypatch):
         }
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/ai/expense-summary?start_date=2024-01-01&end_date=2024-12-31")
         assert response.status_code == 200
@@ -140,10 +139,7 @@ async def test_get_cashflow_overview(monkeypatch):
         if "OrderDirection eq 'Income'" in params["$filter"]:
             return {
                 "success": True,
-                "data": [
-                    {"TotalIncl": 5000.00},
-                    {"TotalIncl": 10000.00}
-                ],
+                "data": [{"TotalIncl": 5000.00}, {"TotalIncl": 10000.00}],
                 "error": None,
                 "error_code": None,
             }
@@ -159,7 +155,7 @@ async def test_get_cashflow_overview(monkeypatch):
             }
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/ai/cashflow?period=2024-01")
         assert response.status_code == 200
@@ -190,7 +186,7 @@ async def test_categorize_expense_invoice(monkeypatch):
         }
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/ai/categorize-expense/123")
         assert response.status_code == 200
@@ -222,7 +218,7 @@ async def test_list_overdue_invoices(monkeypatch):
         }
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/ai/overdue-invoices")
         assert response.status_code == 200
@@ -255,7 +251,7 @@ async def test_get_supplier_spend_summary(monkeypatch):
         }
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/ai/supplier-spend/456?period=2024")
         assert response.status_code == 200
@@ -283,7 +279,7 @@ async def test_get_customer_revenue_summary(monkeypatch):
         }
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/ai/customer-revenue/789?period=2024")
         assert response.status_code == 200
@@ -301,7 +297,7 @@ async def test_find_duplicate_contacts(monkeypatch):
         assert method == "GET"
         assert endpoint == "/parties"
         params = kwargs.get("params", {})
-        assert params["$top"] == 500
+        assert params["$top"] == 120
         return {
             "success": True,
             "data": [
@@ -313,7 +309,7 @@ async def test_find_duplicate_contacts(monkeypatch):
         }
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/ai/duplicate-contacts")
         assert response.status_code == 200
@@ -356,7 +352,7 @@ async def test_normalize_contact_address(monkeypatch):
         return {"success": True, "data": {}, "error": None, "error_code": None}
 
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/ai/normalize-address/123")
         assert response.status_code == 200
@@ -375,17 +371,15 @@ async def test_create_invoice_from_text(monkeypatch):
             "OrderID": 999,
             "ParsedData": {
                 "Customer": "Tech Corp",
-                "Items": [
-                    {"Description": "Consulting", "Amount": 5000.00}
-                ],
-                "TotalAmount": 5000.00
+                "Items": [{"Description": "Consulting", "Amount": 5000.00}],
+                "TotalAmount": 5000.00,
             },
-            "Confidence": 0.88
+            "Confidence": 0.88,
         },
         "error": None,
-        "error_code": None
+        "error_code": None,
     }
-    
+
     async def fake_request(self, method, endpoint, **kwargs):
         assert method == "POST"
         assert endpoint == "/orders"
@@ -393,13 +387,14 @@ async def test_create_invoice_from_text(monkeypatch):
         description = data["OrderLines"][0]["Description"]
         assert "Invoice Tech Corp for 5000 euros consulting work" in description
         return expected_response
-    
+
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post("/ai/create-invoice-from-text", json={
-            "text_description": "Invoice Tech Corp for 5000 euros consulting work"
-        })
+        response = await client.post(
+            "/ai/create-invoice-from-text",
+            json={"text_description": "Invoice Tech Corp for 5000 euros consulting work"},
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
@@ -413,7 +408,7 @@ async def test_smart_search_orders(monkeypatch):
     async def fake_request(self, method, endpoint, **kwargs):
         assert method == "GET"
         assert endpoint == "/orders"
-        assert kwargs["params"] == {"$top": 500}
+        assert kwargs["params"] == {"$top": 120}
         return {
             "success": True,
             "data": [
@@ -471,20 +466,20 @@ async def test_ai_composite_error_handling(monkeypatch):
         "success": False,
         "data": None,
         "error": "AI processing failed",
-        "error_code": "AI_ERROR"
+        "error_code": "AI_ERROR",
     }
-    
+
     async def fake_request(self, method, endpoint, **kwargs):
         return error_response
-    
+
     monkeypatch.setattr("billit.client.BillitAPIClient.request", fake_request)
-    
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Test various endpoints with error response
         response = await client.get("/ai/suggest-payment-reconciliation")
         assert response.status_code == 200
         assert response.json() == error_response
-        
+
         response = await client.get("/ai/overdue-invoices")
         assert response.status_code == 200
         assert response.json() == error_response

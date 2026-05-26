@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-_rate_limiter: "RateLimiter | None" = None
+_rate_limiter: RateLimiter | None = None
 
 
 def get_env(name: str, default: str | None = None) -> str:
@@ -86,7 +86,6 @@ class BillitAPIClient:
         headers = {
             "apiKey": self.api_key,
             "partyID": self.party_id,
-            "Content-Type": "application/json",
             "Accept": "application/json",
         }
 

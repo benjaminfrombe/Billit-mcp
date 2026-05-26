@@ -16,11 +16,11 @@ registers tool functions with `@mcp.tool()`. Running `python -m billit_mcp`
 loads `.env`, configures logging, imports the MCP server, and starts stdio
 protocol handling.
 
-Each MCP tool creates a `BillitAPIClient` with environment-derived headers,
-then forwards to a Billit endpoint or to a small local helper. The current MCP
-surface registers 44 tools across parties, products, orders, financial
-transactions, account, documents, webhooks, Peppol, reports, utility lookups,
-and composite search.
+MCP tools use a process-scoped `BillitAPIClient` with environment-derived
+headers. The server lifespan closes that client when stdio handling shuts down.
+The current MCP surface registers 44 tools across parties, products, orders,
+financial transactions, account, documents, webhooks, Peppol, reports, utility
+lookups, and composite helpers.
 
 ## Billit MCP Legacy FastAPI Adapter
 
@@ -66,22 +66,23 @@ request-scoped FastAPI client from resetting its own bucket and accidentally
 overrunning Billit API limits.
 
 FastAPI routes receive a request-scoped client through `billit/dependencies.py`
-and close its underlying `httpx.AsyncClient` after each request. MCP tools
-currently build clients directly through `build_client()`; when changing MCP
-tool internals, be aware that long-running clients and cleanup behavior differ
-from the FastAPI dependency path.
+and close its underlying `httpx.AsyncClient` after each request. MCP tools use
+one process-scoped client from `src/billit_mcp/server.py` and close it through
+the FastMCP lifespan hook.
 
 ## Billit MCP Smart Search Data Flow
 
 `billit/smart_search.py` implements local search for orders, parties, and
-products. It fetches up to 500 records from the selected entity type, parses
+products. It fetches up to 120 records from the selected entity type, parses
 amounts, dates, and content keywords from the user query, scores matches with
 keyword checks and `SequenceMatcher`, then returns ranked results.
 
 The helper is used by both `GET /ai/smart-search` in the FastAPI adapter and
-the `smart_search` / `debug_smart_search` MCP tools. Upstream Billit API
-failures are propagated instead of being converted into empty successful
-results.
+the `smart_search` / `debug_smart_search` MCP tools. Other composite helpers
+live under `billit/services/` so MCP and FastAPI call local shared code instead
+of forwarding local `/ai/...` routes through the Billit REST client. Upstream
+Billit API failures are propagated instead of being converted into empty
+successful results.
 
 ## Billit MCP Known Architecture Gotchas
 
@@ -89,10 +90,9 @@ MCP and FastAPI tool coverage is not identical. The FastAPI adapter contains
 routes for accountant feeds, GL accounts, OCR processing, extra AI composites,
 and Peppol inbox operations that are not currently registered as MCP tools.
 
-Some packaged MCP composite tools still forward to `/ai/...` paths on the
-Billit API. Those paths are local FastAPI adapter routes, not known Billit REST
-endpoints. Treat those MCP composite wrappers as legacy until they are rewired
-to local helper functions like `smart_search`.
+Report tools use the canonical Billit path `/reports`. Financial transaction
+tools use `/financialTransactions`. The local live canary records these
+endpoint decisions in sanitized evidence when endpoint drift is being checked.
 
 Billit payloads use PascalCase fields such as `OrderID`, `OrderLines`, and
 `PartyID`. FastAPI route parameters often use snake_case for local ergonomics,

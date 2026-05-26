@@ -2,8 +2,10 @@
 
 from .server import mcp
 
-def main():
+
+def main() -> None:
     """Main entry point for the billit-mcp script."""
     mcp.run()
 
-__all__ = ["mcp", "main"]
+
+__all__ = ["main", "mcp"]

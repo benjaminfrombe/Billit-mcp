@@ -36,14 +36,14 @@ is the codebase, not older generated plans or historical task logs.
 Run these before handing off code or documentation changes:
 
 ```bash
-poetry run ruff check .
-poetry run pytest -q
+uv run ruff check .
+uv run pytest -q
 ```
 
 Run live tests only when credentials and environment are intentionally selected:
 
 ```bash
-poetry run pytest tests/test_live_integration.py -q --live
+uv run pytest tests/test_live_integration.py -q --live
 ```
 
 ## Olivier Drafting Voice

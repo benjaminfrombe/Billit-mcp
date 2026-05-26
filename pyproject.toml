@@ -1,61 +1,159 @@
-[tool.poetry]
+[project]
 name = "billit-mcp"
 version = "0.2.20"
-description = "Model Context Protocol server for Billit API integration, enabling AI assistants to manage invoices and financial transactions"
-authors = ["Olivier Motium"]
+description = "Model Context Protocol server for Billit API integration"
 readme = "README.md"
+requires-python = ">=3.12"
 license = "MIT"
-homepage = "https://github.com/olivier-motium/Billit-mcp"
-repository = "https://github.com/olivier-motium/Billit-mcp"
-documentation = "https://github.com/olivier-motium/Billit-mcp#readme"
-keywords = ["mcp", "model-context-protocol", "billit", "invoice", "api", "ai", "cursor"]
+authors = [{ name = "Olivier Motium" }]
+keywords = ["mcp", "model-context-protocol", "billit", "invoice", "api", "ai"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Office/Business :: Financial",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-packages = [{include = "billit"}, {include = "billit_mcp", from = "src"}]
+dependencies = [
+    "fastapi==0.115.12",
+    "uvicorn[standard]==0.34.3",
+    "httpx==0.28.1",
+    "pydantic==2.11.5",
+    "python-dotenv==1.1.0",
+    "python-multipart==0.0.20",
+    "mcp==1.6.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-fastapi = "^0.115.12"
-uvicorn = {extras = ["standard"], version = "^0.34.3"}
-httpx = "^0.28.1"
-pydantic = "^2.11.5"
-python-dotenv = "^1.1.0"
-python-multipart = "^0.0.7"
-mcp = "^1.0.0"
+[project.urls]
+Homepage = "https://github.com/olivier-motium/Billit-mcp"
+Repository = "https://github.com/olivier-motium/Billit-mcp"
+Documentation = "https://github.com/olivier-motium/Billit-mcp#readme"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.4.0"
-pytest-asyncio = "^1.0.0"
-respx = "^0.22.0"
-pytest-cov = "^6.1.1"
-ruff = "^0.15.14"
-
-[tool.poetry.scripts]
+[project.scripts]
 billit-mcp = "billit_mcp:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.4.0",
+    "pytest-asyncio==1.0.0",
+    "pytest-cov==6.1.1",
+    "pytest-randomly==3.16.0",
+    "respx==0.22.0",
+    "ruff==0.15.14",
+    "mypy==1.20.2",
+    "import-linter==2.11",
+    "diff-cover==10.2.0",
+]
+
+[dependency-groups]
+dev = ["billit-mcp[dev]"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["billit", "src/billit_mcp"]
+
+[tool.uv]
+exclude-newer = "2026-05-26T23:59:59Z"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
+addopts = "-v --tb=short"
 markers = [
-    "live: marks tests that require live API credentials (deselect with '-m \"not live\"')",
+    "live: marks tests that require live API credentials",
+    "allow_billit_request: test intentionally exercises BillitAPIClient.request with mocks",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+src = ["billit", "src", "tests", "scripts"]
 
 [tool.ruff.lint]
-select = ["E", "F"]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "SIM",
+    "TCH",
+    "RUF",
+]
+ignore = ["E501"]
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.ruff.lint.per-file-ignores]
+"billit/tools/*.py" = ["B008", "TCH001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["billit", "billit_mcp"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+files = ["billit", "src", "tests", "scripts/local/live_billit_canary.py"]
+check_untyped_defs = true
+disallow_incomplete_defs = false
+disallow_untyped_defs = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["billit.*", "billit_mcp.*"]
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["mcp.*", "respx.*"]
+ignore_missing_imports = true
+
+[tool.importlinter]
+root_packages = ["billit", "billit_mcp"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "MCP adapter does not import FastAPI adapter"
+type = "forbidden"
+source_modules = ["billit_mcp"]
+forbidden_modules = ["billit.tools"]
+
+[[tool.importlinter.contracts]]
+name = "FastAPI adapter does not import MCP adapter"
+type = "forbidden"
+source_modules = ["billit.tools"]
+forbidden_modules = ["billit_mcp"]
+
+[[tool.importlinter.contracts]]
+name = "Client stays adapter independent"
+type = "forbidden"
+source_modules = ["billit.client"]
+forbidden_modules = ["billit.tools", "billit_mcp"]
+
+[[tool.importlinter.contracts]]
+name = "Models stay adapter independent"
+type = "forbidden"
+source_modules = ["billit.models"]
+forbidden_modules = ["billit.tools", "billit_mcp", "fastapi", "httpx"]
+
+[tool.coverage.run]
+source = ["billit", "billit_mcp"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ ==",
+]

@@ -2,12 +2,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install Poetry
-RUN pip install --no-cache-dir poetry==2.1.3
+ENV UV_PROJECT_ENVIRONMENT=/usr/local
 
-COPY pyproject.toml poetry.lock ./
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi
+RUN pip install --no-cache-dir uv==0.7.12
+
+COPY README.md pyproject.toml uv.lock ./
+COPY billit ./billit
+COPY src ./src
+RUN uv sync --locked --no-dev
 
 COPY . .
 
