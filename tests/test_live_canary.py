@@ -67,7 +67,7 @@ def test_canary_prefers_sandbox_specific_env(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_canary_uses_keychain_before_generic_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BILLIT_SANDBOX_API_KEY_K4K", raising=False)
-    monkeypatch.delenv("BILLIT_SANDBOX_API_KEY", raising=False)
+    monkeypatch.setenv("BILLIT_SANDBOX_API_KEY", "sandbox-generic")
     monkeypatch.setenv("BILLIT_API_KEY", "generic")
     monkeypatch.setenv("BILLIT_PARTY_ID", "111")
 
@@ -78,6 +78,19 @@ def test_canary_uses_keychain_before_generic_key(monkeypatch: pytest.MonkeyPatch
 
     assert settings.billit.api_key == "keychain-secret"
     assert settings.key_source == "keychain:BILLIT_SANDBOX_API_KEY_K4K"
+
+
+def test_canary_rejects_generic_sandbox_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BILLIT_SANDBOX_API_KEY_K4K", raising=False)
+    monkeypatch.setenv("BILLIT_SANDBOX_API_KEY", "sandbox-generic")
+    monkeypatch.setenv("BILLIT_API_KEY", "generic")
+    monkeypatch.setenv("BILLIT_PARTY_ID", "111")
+
+    with pytest.raises(SystemExit, match="BILLIT_SANDBOX_API_KEY_K4K"):
+        canary.resolve_canary_settings(
+            canary.SANDBOX_BASE_URL,
+            keychain_reader=lambda service: None,
+        )
 
 
 def test_seed_helper_secret_lookup_prefers_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,6 +114,18 @@ async def test_read_only_client_blocks_write_requests() -> None:
 
     assert result["success"] is False
     assert result["error_code"] == "LIVE_CANARY_WRITE_BLOCKED"
+
+
+@pytest.mark.asyncio
+async def test_api_key_canary_rejects_non_sandbox_url(tmp_path) -> None:
+    with pytest.raises(SystemExit, match="sandbox-only"):
+        await canary.run_canary(
+            base_url="https://api.billit.be/v1",
+            output_root=tmp_path,
+            mode="api-key-readonly",
+            keychain_reader=lambda service: None,
+            client_factory=FakeCanaryClient,
+        )
 
 
 @pytest.mark.asyncio

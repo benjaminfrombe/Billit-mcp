@@ -118,7 +118,7 @@ def resolve_canary_settings(
 
     environment = environment_name(base_url)
     if environment == "sandbox":
-        env_key = first_present_env("BILLIT_SANDBOX_API_KEY_K4K", "BILLIT_SANDBOX_API_KEY")
+        env_key = first_present_env("BILLIT_SANDBOX_API_KEY_K4K")
         if env_key is not None:
             api_key, key_source = env_key
         else:
@@ -127,14 +127,10 @@ def resolve_canary_settings(
                 api_key = keychain_secret
                 key_source = f"keychain:{SANDBOX_KEYCHAIN_SERVICE}"
             else:
-                generic_key = first_present_env("BILLIT_API_KEY")
-                if generic_key is None:
-                    raise SystemExit(
-                        "Sandbox canary requires BILLIT_SANDBOX_API_KEY_K4K, "
-                        f"BILLIT_SANDBOX_API_KEY, Keychain service {SANDBOX_KEYCHAIN_SERVICE}, "
-                        "or BILLIT_API_KEY."
-                    )
-                api_key, key_source = generic_key
+                raise SystemExit(
+                    "Sandbox canary requires BILLIT_SANDBOX_API_KEY_K4K from env "
+                    f"or macOS Keychain service {SANDBOX_KEYCHAIN_SERVICE}."
+                )
         party_id = resolve_canary_party_id(sandbox=True)
     else:
         generic_key = first_present_env("BILLIT_API_KEY")

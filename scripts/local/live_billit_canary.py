@@ -44,6 +44,8 @@ async def run_canary(
     """Run the selected local live Billit canary mode."""
 
     if mode == "api-key-readonly":
+        if base_url != SANDBOX_BASE_URL:
+            raise SystemExit(f"API-key live canary is sandbox-only; use {SANDBOX_BASE_URL}.")
         return await run_api_key_canary(
             base_url=base_url,
             output_root=output_root,
