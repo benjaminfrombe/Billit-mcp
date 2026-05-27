@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from billit.client import BillitSettings
 from billit_mcp.auth.billit_oauth import BillitOAuthBridge
-from billit_mcp.auth.security import FernetCipher, JWTService
+from billit_mcp.auth.security import FernetCipher, JWTService, sha256_text
 from billit_mcp.hosted_config import HostedSettings
 from billit_mcp.http_app import create_app
 from billit_mcp.persistence.database import HostedDatabase
@@ -27,6 +27,7 @@ from billit_mcp.persistence.models import (
     BillitCompany,
     BillitConnection,
     BillitOAuthGrant,
+    IdempotencyRecord,
     OAuthClient,
 )
 from billit_mcp.services.filters import compile_order_params, compile_party_params
@@ -36,7 +37,7 @@ from billit_mcp.services.hosted_runtime import (
     error_result,
     hash_payload,
 )
-from billit_mcp.services.invoice import build_invoice_preflight
+from billit_mcp.services.invoice import build_invoice_payload, build_invoice_preflight
 
 HOSTED_TOOL_NAMES = {
     "billit.connection_status",
@@ -209,6 +210,127 @@ def test_hosted_mcp_tools_call_through_curated_runtime(monkeypatch, tmp_path) ->
         assert _tool_json(confirm_send)["success"] is True, _tool_json(confirm_send)
 
     assert ("POST", "/orders/commands/send") in fake_client.calls
+
+
+def test_hosted_create_draft_blocks_unsafe_idempotency_replay(monkeypatch, tmp_path) -> None:
+    """Hosted invoice draft replays do not repeat Billit writes for unsafe states."""
+
+    monkeypatch.setenv("BILLIT_MCP_DATABASE_URL", _hosted_db_url(tmp_path))
+    run_migrations(_hosted_db_url(tmp_path))
+    app = create_app()
+    fake_client = FakeBillitClient()
+
+    async def fake_make_client(*, connection_id: str, company_party_id: int) -> FakeBillitClient:
+        assert connection_id
+        assert company_party_id == 123
+        return fake_client
+
+    monkeypatch.setattr(app.state.hosted_billit_bridge, "make_client", fake_make_client)
+    client = TestClient(app, base_url="http://localhost:8000")
+    with client:
+        token = _issue_token(client)
+        claims = app.state.hosted_jwt_service.decode(token)
+        connection_id = asyncio.run(_seed_active_connection(app, str(claims["sub"]), 123))
+        operation_hash = hash_payload(
+            build_invoice_payload(
+                customer={"name": "ACME"},
+                lines=[{"description": "Work", "quantity": 1, "unit_price": 100}],
+                order_date="2026-05-26",
+                expiry_date="2026-06-25",
+                external_provider_id=None,
+            )
+        )
+        asyncio.run(
+            _seed_hosted_idempotency(
+                app,
+                connection_id=connection_id,
+                operation_hash=operation_hash,
+                status="started",
+            )
+        )
+        headers = _mcp_headers(token)
+        _initialize_mcp(client, headers)
+
+        result = _call_tool(
+            client,
+            headers,
+            "billit.invoice.create_draft",
+            {
+                "environment": "sandbox",
+                "company_party_id": 123,
+                "customer": {"name": "ACME"},
+                "lines": [{"description": "Work", "quantity": 1, "unit_price": 100}],
+                "order_date": "2026-05-26",
+                "expiry_date": "2026-06-25",
+                "idempotency_key": "pytest-draft",
+            },
+        )
+
+    payload = _tool_json(result)
+    assert payload["success"] is False
+    assert payload["error_code"] == "IDEMPOTENCY_REPLAY_BLOCKED"
+    assert ("POST", "/orders") not in fake_client.calls
+
+
+def test_hosted_create_draft_replays_succeeded_idempotency(monkeypatch, tmp_path) -> None:
+    """Hosted invoice draft replay returns the stored order id without a Billit write."""
+
+    monkeypatch.setenv("BILLIT_MCP_DATABASE_URL", _hosted_db_url(tmp_path))
+    run_migrations(_hosted_db_url(tmp_path))
+    app = create_app()
+    fake_client = FakeBillitClient()
+
+    async def fake_make_client(*, connection_id: str, company_party_id: int) -> FakeBillitClient:
+        assert connection_id
+        assert company_party_id == 123
+        return fake_client
+
+    monkeypatch.setattr(app.state.hosted_billit_bridge, "make_client", fake_make_client)
+    client = TestClient(app, base_url="http://localhost:8000")
+    with client:
+        token = _issue_token(client)
+        claims = app.state.hosted_jwt_service.decode(token)
+        connection_id = asyncio.run(_seed_active_connection(app, str(claims["sub"]), 123))
+        operation_hash = hash_payload(
+            build_invoice_payload(
+                customer={"name": "ACME"},
+                lines=[{"description": "Work", "quantity": 1, "unit_price": 100}],
+                order_date="2026-05-26",
+                expiry_date="2026-06-25",
+                external_provider_id=None,
+            )
+        )
+        asyncio.run(
+            _seed_hosted_idempotency(
+                app,
+                connection_id=connection_id,
+                operation_hash=operation_hash,
+                status="succeeded",
+                billit_resource_id="99",
+            )
+        )
+        headers = _mcp_headers(token)
+        _initialize_mcp(client, headers)
+
+        result = _call_tool(
+            client,
+            headers,
+            "billit.invoice.create_draft",
+            {
+                "environment": "sandbox",
+                "company_party_id": 123,
+                "customer": {"name": "ACME"},
+                "lines": [{"description": "Work", "quantity": 1, "unit_price": 100}],
+                "order_date": "2026-05-26",
+                "expiry_date": "2026-06-25",
+                "idempotency_key": "pytest-draft",
+            },
+        )
+
+    payload = _tool_json(result)
+    assert payload["success"] is True
+    assert payload["data"] == {"idempotent_replay": True, "order_id": "99"}
+    assert ("POST", "/orders") not in fake_client.calls
 
 
 def test_hosted_oauth_rejects_code_reuse(monkeypatch, tmp_path) -> None:
@@ -568,15 +690,17 @@ async def test_runtime_idempotency_and_error_helpers(monkeypatch, tmp_path) -> N
             idempotency_key="idem",
             operation_hash=hash_payload({"a": 1}),
         )
-        assert replay.idempotency_id == first.idempotency_id
+        assert first.created is True
+        assert replay.created is False
+        assert replay.record.idempotency_id == first.record.idempotency_id
         await runtime.record_idempotency_outcome(
-            idempotency_id=first.idempotency_id,
+            idempotency_id=first.record.idempotency_id,
             status="conflict",
             billit_error_code="409",
         )
         try:
             await runtime.record_idempotency_outcome(
-                idempotency_id=first.idempotency_id,
+                idempotency_id=first.record.idempotency_id,
                 status="done",
             )
         except ValueError:
@@ -709,7 +833,7 @@ def _runtime_parts(tmp_path: Any) -> tuple[HostedDatabase, HostedToolRuntime, Bi
     return database, runtime, bridge
 
 
-async def _seed_active_connection(app: Any, actor_id: str, company_party_id: int) -> None:
+async def _seed_active_connection(app: Any, actor_id: str, company_party_id: int) -> str:
     async with app.state.hosted_database.session() as session:
         connection = BillitConnection(
             actor_id=actor_id,
@@ -726,6 +850,30 @@ async def _seed_active_connection(app: Any, actor_id: str, company_party_id: int
                 company_party_id=company_party_id,
                 active=True,
                 last_seen_at=datetime.now(UTC),
+            )
+        )
+        return str(connection.connection_id)
+
+
+async def _seed_hosted_idempotency(
+    app: Any,
+    *,
+    connection_id: str,
+    operation_hash: str,
+    status: str,
+    billit_resource_id: str | None = None,
+) -> None:
+    async with app.state.hosted_database.session() as session:
+        session.add(
+            IdempotencyRecord(
+                connection_id=connection_id,
+                company_party_id=123,
+                operation_type="invoice_create_draft",
+                idempotency_key_hash=sha256_text("pytest-draft"),
+                operation_hash=operation_hash,
+                status=status,
+                billit_resource_type="order" if billit_resource_id else None,
+                billit_resource_id=billit_resource_id,
             )
         )
 

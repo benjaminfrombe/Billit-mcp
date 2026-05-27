@@ -16,7 +16,7 @@ from billit_mcp.services.invoice import build_invoice_preflight
 from billit_mcp.services.invoice_workflow import (
     ConfirmSendRequest,
     DraftInvoiceRequest,
-    IdempotencyState,
+    IdempotencyStart,
     PendingSendChallenge,
     PrepareSendRequest,
     SendChallenge,
@@ -273,22 +273,16 @@ class HostedInvoiceWorkflowAdapter:
         operation_type: str,
         idempotency_key: str | None,
         operation_hash: str,
-    ) -> IdempotencyState | None:
+    ) -> IdempotencyStart | None:
         if not idempotency_key:
             return None
         connection = await self._authorized_connection()
-        record = await self.runtime.record_idempotency_started(
+        return await self.runtime.record_idempotency_started(
             connection_id=connection.connection_id,
             company_party_id=self.company_party_id,
             operation_type=operation_type,
             idempotency_key=idempotency_key,
             operation_hash=operation_hash,
-        )
-        return IdempotencyState(
-            idempotency_id=record.idempotency_id,
-            status=record.status,
-            operation_hash=record.operation_hash,
-            billit_resource_id=record.billit_resource_id,
         )
 
     async def record_idempotency_outcome(

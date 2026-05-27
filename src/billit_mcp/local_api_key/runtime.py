@@ -37,7 +37,7 @@ from billit_mcp.local_api_key.settings import (
 from billit_mcp.local_api_key.state import LocalConfirmationChallenge, LocalStateStore
 from billit_mcp.local_api_key.state_services import LocalWorkflowState
 from billit_mcp.services.invoice_workflow import (
-    IdempotencyState,
+    IdempotencyStart,
     PendingSendChallenge,
     SendChallenge,
     redacted_send_summary,
@@ -218,7 +218,7 @@ class LocalAPIKeyRuntime:
         operation_type: str,
         idempotency_key: str | None,
         operation_hash: str,
-    ) -> IdempotencyState | None:
+    ) -> IdempotencyStart | None:
         """Create or return local idempotency state for the shared workflow."""
 
         return await self._workflow_state.idempotency_state(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import sqlite3
 from types import SimpleNamespace
 from typing import Any
 
@@ -16,6 +17,8 @@ from billit.client import BillitSettings
 from billit_mcp import stdio
 from billit_mcp.local_api_key.runtime import LOCAL_API_KEY_TOOL_NAMES, LocalAPIKeyRuntime
 from billit_mcp.local_api_key.state import LocalStateStore
+from billit_mcp.services.invoice import build_invoice_payload
+from billit_mcp.services.invoice_workflow import hash_payload
 
 
 class FakeBillitClient:
@@ -107,6 +110,69 @@ def _runtime(
         client_factory=factory,
     )
     return runtime, clients
+
+
+class DetailFailureBillitClient(FakeBillitClient):
+    """Fake Billit client that creates a draft but fails the follow-up detail read."""
+
+    async def request(self, method: str, endpoint: str, **kwargs: Any) -> dict[str, Any]:
+        if endpoint == "/orders/99" and method.upper() == "GET":
+            raise RuntimeError("detail refetch failed")
+        return await super().request(method, endpoint, **kwargs)
+
+
+def _draft_payload_hash(
+    *,
+    customer: dict[str, Any] | None = None,
+    lines: list[dict[str, Any]] | None = None,
+) -> str:
+    return hash_payload(
+        build_invoice_payload(
+            customer=customer or {"name": "ACME"},
+            lines=lines or [{"description": "Work", "quantity": 1, "unit_price": 100}],
+            order_date="2026-05-26",
+            expiry_date="2026-06-25",
+            external_provider_id=None,
+        )
+    )
+
+
+async def _seed_local_idempotency(
+    runtime: LocalAPIKeyRuntime,
+    *,
+    idempotency_key: str = "draft-1",
+    operation_hash: str | None = None,
+    status: str | None = None,
+    billit_resource_id: str | None = None,
+) -> None:
+    started = await runtime.local_idempotency_state(
+        operation_type="invoice_create_draft",
+        idempotency_key=idempotency_key,
+        operation_hash=operation_hash or _draft_payload_hash(),
+    )
+    assert started is not None
+    if status is not None:
+        await runtime.record_local_idempotency_outcome(
+            idempotency_id=started.record.idempotency_id,
+            status=status,
+            billit_resource_type="order" if billit_resource_id else None,
+            billit_resource_id=billit_resource_id,
+        )
+
+
+def _local_idempotency_status(path: Any) -> str:
+    with sqlite3.connect(path / "state.db") as connection:
+        row = connection.execute(
+            """
+            select status
+              from local_idempotency_records
+             where operation_type = 'invoice_create_draft'
+             order by created_at desc
+             limit 1
+            """
+        ).fetchone()
+    assert row is not None
+    return str(row[0])
 
 
 def test_stdio_log_level_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -323,6 +389,121 @@ async def test_local_create_draft_uses_idempotency_and_redacted_state(
     assert ("POST", "/orders") in [(method, endpoint) for method, endpoint, _ in clients[0].calls]
     assert b"ACME" not in (tmp_path / "state.db").read_bytes()
     assert any(event["event_type"] == "billit_api_call" for event in runtime.state.audit_events())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["started", "failed", "unknown_side_effect", "conflict"])
+async def test_local_create_draft_blocks_unsafe_idempotency_replay_without_post(
+    status: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    runtime, clients = _runtime(tmp_path, monkeypatch)
+    monkeypatch.setenv("BILLIT_MCP_LOCAL_ALLOW_WRITES", "1")
+    await _seed_local_idempotency(
+        runtime,
+        status=None if status == "started" else status,
+    )
+    calls_before = len(clients[0].calls) if clients else 0
+
+    result = await runtime.invoice_create_draft(
+        customer={"name": "ACME"},
+        lines=[{"description": "Work", "quantity": 1, "unit_price": 100}],
+        order_date="2026-05-26",
+        expiry_date="2026-06-25",
+        idempotency_key="draft-1",
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "IDEMPOTENCY_REPLAY_BLOCKED"
+    assert clients[0].calls[calls_before:] == [("GET", "/account/accountInformation", {})]
+    assert ("POST", "/orders") not in [
+        (method, endpoint) for method, endpoint, _ in clients[0].calls[calls_before:]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_local_create_draft_replays_succeeded_idempotency_without_post(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    runtime, clients = _runtime(tmp_path, monkeypatch)
+    monkeypatch.setenv("BILLIT_MCP_LOCAL_ALLOW_WRITES", "1")
+    await _seed_local_idempotency(runtime, status="succeeded", billit_resource_id="99")
+    calls_before = len(clients[0].calls) if clients else 0
+
+    result = await runtime.invoice_create_draft(
+        customer={"name": "ACME"},
+        lines=[{"description": "Work", "quantity": 1, "unit_price": 100}],
+        order_date="2026-05-26",
+        expiry_date="2026-06-25",
+        idempotency_key="draft-1",
+    )
+
+    assert result["success"] is True
+    assert result["data"] == {"idempotent_replay": True, "order_id": "99"}
+    assert clients[0].calls[calls_before:] == [("GET", "/account/accountInformation", {})]
+
+
+@pytest.mark.asyncio
+async def test_local_create_draft_detects_idempotency_hash_conflict_without_post(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    runtime, clients = _runtime(tmp_path, monkeypatch)
+    monkeypatch.setenv("BILLIT_MCP_LOCAL_ALLOW_WRITES", "1")
+    await _seed_local_idempotency(runtime, operation_hash="different-operation")
+    calls_before = len(clients[0].calls) if clients else 0
+
+    result = await runtime.invoice_create_draft(
+        customer={"name": "ACME"},
+        lines=[{"description": "Work", "quantity": 1, "unit_price": 100}],
+        order_date="2026-05-26",
+        expiry_date="2026-06-25",
+        idempotency_key="draft-1",
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "IDEMPOTENCY_CONFLICT"
+    assert clients[0].calls[calls_before:] == [("GET", "/account/accountInformation", {})]
+
+
+@pytest.mark.asyncio
+async def test_local_create_draft_detail_refetch_failure_keeps_successful_idempotency(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.delenv("BILLIT_MCP_LOCAL_ALLOW_SENDS", raising=False)
+    monkeypatch.setenv("BILLIT_MCP_LOCAL_ALLOW_WRITES", "1")
+    clients: list[DetailFailureBillitClient] = []
+
+    def factory(settings: BillitSettings) -> DetailFailureBillitClient:
+        client = DetailFailureBillitClient(settings)
+        clients.append(client)
+        return client
+
+    runtime = LocalAPIKeyRuntime(
+        settings=BillitSettings(
+            base_url="https://api.sandbox.billit.be/v1",
+            api_key="local-key",
+            party_id="1",
+            rate_limit_per_minute=100000,
+        ),
+        state=LocalStateStore(tmp_path / "state.db"),
+        client_factory=factory,
+    )
+
+    result = await runtime.invoice_create_draft(
+        customer={"name": "ACME"},
+        lines=[{"description": "Work", "quantity": 1, "unit_price": 100}],
+        order_date="2026-05-26",
+        expiry_date="2026-06-25",
+        idempotency_key="draft-1",
+    )
+
+    assert result == {"success": True, "data": {"OrderID": 99}, "error": None, "error_code": None}
+    assert _local_idempotency_status(tmp_path) == "succeeded"
+    assert ("POST", "/orders") in [(method, endpoint) for method, endpoint, _ in clients[0].calls]
 
 
 @pytest.mark.asyncio

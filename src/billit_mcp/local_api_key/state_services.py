@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from billit_mcp.local_api_key.common import LocalToolError, hash_payload, hash_text, token
 from billit_mcp.services.invoice_workflow import (
+    IdempotencyStart,
     IdempotencyState,
     PendingSendChallenge,
     SendChallenge,
@@ -177,28 +177,28 @@ class LocalWorkflowState:
         operation_type: str,
         idempotency_key: str | None,
         operation_hash: str,
-    ) -> LocalIdempotencyRecord | None:
+    ) -> IdempotencyStart | None:
         """Create or return a local idempotency record."""
 
         if not idempotency_key:
             return None
-        record = cast(
-            "LocalIdempotencyRecord",
-            self.runtime.state.record_idempotency_started(
-                idempotency_id=str(uuid.uuid4()),
-                company_party_id=self.runtime.configured_party_id,
-                operation_type=operation_type,
-                idempotency_key_hash=hash_text(idempotency_key),
-                operation_hash=operation_hash,
-            ),
+        started = self.runtime.state.record_idempotency_started(
+            idempotency_id=str(uuid.uuid4()),
+            company_party_id=self.runtime.configured_party_id,
+            operation_type=operation_type,
+            idempotency_key_hash=hash_text(idempotency_key),
+            operation_hash=operation_hash,
         )
-        if record.operation_hash != operation_hash:
-            raise LocalToolError(
-                "idempotency_conflict",
-                "Idempotency key was already used for a different operation",
-                error_code="IDEMPOTENCY_CONFLICT",
-            )
-        return record
+        record = cast("LocalIdempotencyRecord", started.record)
+        return IdempotencyStart(
+            record=IdempotencyState(
+                idempotency_id=record.idempotency_id,
+                status=record.status,
+                operation_hash=record.operation_hash,
+                billit_resource_id=record.billit_resource_id,
+            ),
+            created=bool(started.created),
+        )
 
     async def idempotency_state(
         self,
@@ -206,21 +206,13 @@ class LocalWorkflowState:
         operation_type: str,
         idempotency_key: str | None,
         operation_hash: str,
-    ) -> IdempotencyState | None:
+    ) -> IdempotencyStart | None:
         """Return workflow idempotency state."""
 
-        record = self.record_idempotency_started(
+        return self.record_idempotency_started(
             operation_type=operation_type,
             idempotency_key=idempotency_key,
             operation_hash=operation_hash,
-        )
-        if record is None:
-            return None
-        return IdempotencyState(
-            idempotency_id=record.idempotency_id,
-            status=record.status,
-            operation_hash=record.operation_hash,
-            billit_resource_id=record.billit_resource_id,
         )
 
     async def record_idempotency_outcome(
@@ -234,11 +226,16 @@ class LocalWorkflowState:
     ) -> None:
         """Persist a workflow idempotency outcome."""
 
-        with suppress(Exception):
-            self.runtime.state.record_idempotency_outcome(
-                idempotency_id=idempotency_id,
-                status=status,
-                billit_resource_type=billit_resource_type,
-                billit_resource_id=billit_resource_id,
-                billit_error_code=billit_error_code,
+        recorded = self.runtime.state.record_idempotency_outcome(
+            idempotency_id=idempotency_id,
+            status=status,
+            billit_resource_type=billit_resource_type,
+            billit_resource_id=billit_resource_id,
+            billit_error_code=billit_error_code,
+        )
+        if not recorded:
+            raise LocalToolError(
+                "idempotency_state_error",
+                "Local idempotency outcome could not be recorded; manual reconciliation may be required.",
+                error_code="LOCAL_IDEMPOTENCY_STATE_ERROR",
             )

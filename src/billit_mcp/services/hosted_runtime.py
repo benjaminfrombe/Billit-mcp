@@ -19,7 +19,11 @@ from billit_mcp.persistence.models import (
     ConfirmationChallenge,
     IdempotencyRecord,
 )
-from billit_mcp.services.invoice_workflow import hash_payload as shared_hash_payload
+from billit_mcp.services.invoice_workflow import (
+    IdempotencyStart,
+    IdempotencyState,
+    hash_payload as shared_hash_payload,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -530,7 +534,7 @@ class HostedToolRuntime:
         operation_type: str,
         idempotency_key: str,
         operation_hash: str,
-    ) -> IdempotencyRecord:
+    ) -> IdempotencyStart:
         """Record a local idempotency key if one is provided."""
 
         async with self.database.session() as session:
@@ -542,14 +546,17 @@ class HostedToolRuntime:
                     IdempotencyRecord.idempotency_key_hash == sha256_text(idempotency_key),
                 )
             )
-            if existing is not None and existing.operation_hash != operation_hash:
-                raise HostedToolError(
-                    "idempotency_conflict",
-                    "Idempotency key was already used for a different operation",
-                )
             if existing is not None:
                 session.expunge(existing)
-                return existing
+                return IdempotencyStart(
+                    record=IdempotencyState(
+                        idempotency_id=existing.idempotency_id,
+                        status=existing.status,
+                        operation_hash=existing.operation_hash,
+                        billit_resource_id=existing.billit_resource_id,
+                    ),
+                    created=False,
+                )
             record = IdempotencyRecord(
                 connection_id=connection_id,
                 company_party_id=company_party_id,
@@ -559,8 +566,17 @@ class HostedToolRuntime:
             )
             session.add(record)
             await session.flush()
+            started = IdempotencyStart(
+                record=IdempotencyState(
+                    idempotency_id=record.idempotency_id,
+                    status=record.status,
+                    operation_hash=record.operation_hash,
+                    billit_resource_id=record.billit_resource_id,
+                ),
+                created=True,
+            )
             session.expunge(record)
-            return record
+            return started
 
     async def record_idempotency_outcome(
         self,

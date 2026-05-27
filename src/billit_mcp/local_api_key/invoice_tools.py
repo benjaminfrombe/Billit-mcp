@@ -10,7 +10,7 @@ from billit_mcp.services.invoice import build_invoice_preflight
 from billit_mcp.services.invoice_workflow import (
     ConfirmSendRequest,
     DraftInvoiceRequest,
-    IdempotencyState,
+    IdempotencyStart,
     PendingSendChallenge,
     PrepareSendRequest,
     SendChallenge,
@@ -85,7 +85,7 @@ class LocalInvoiceRuntime(Protocol):
         operation_type: str,
         idempotency_key: str | None,
         operation_hash: str,
-    ) -> IdempotencyState | None:
+    ) -> IdempotencyStart | None:
         """Create or load local idempotency state."""
         ...
 
@@ -281,7 +281,7 @@ class LocalInvoiceWorkflowAdapter:
         operation_type: str,
         idempotency_key: str | None,
         operation_hash: str,
-    ) -> IdempotencyState | None:
+    ) -> IdempotencyStart | None:
         return await self.runtime.local_idempotency_state(
             operation_type=operation_type,
             idempotency_key=idempotency_key,

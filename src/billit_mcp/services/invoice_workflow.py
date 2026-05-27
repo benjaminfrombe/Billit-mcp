@@ -61,6 +61,14 @@ class IdempotencyState:
 
 
 @dataclass(frozen=True)
+class IdempotencyStart:
+    """Result of starting an idempotent workflow operation."""
+
+    record: IdempotencyState
+    created: bool
+
+
+@dataclass(frozen=True)
 class SendChallenge:
     """Challenge created by a runtime adapter."""
 
@@ -118,7 +126,7 @@ class InvoiceWorkflowAdapter(Protocol):
         operation_type: str,
         idempotency_key: str | None,
         operation_hash: str,
-    ) -> IdempotencyState | None:
+    ) -> IdempotencyStart | None:
         """Create or load an idempotency record."""
         ...
 
@@ -196,11 +204,12 @@ async def create_invoice_draft(
         external_provider_id=request.external_provider_id,
     )
     operation_hash = hash_payload(payload)
-    record = await adapter.record_idempotency_started(
+    idempotency = await adapter.record_idempotency_started(
         operation_type="invoice_create_draft",
         idempotency_key=request.idempotency_key,
         operation_hash=operation_hash,
     )
+    record = idempotency.record if idempotency is not None else None
     if record is not None:
         if record.operation_hash != operation_hash:
             raise adapter.workflow_error(
@@ -215,46 +224,52 @@ async def create_invoice_draft(
                     "order_id": record.billit_resource_id,
                 }
             )
-        if record.status in {"conflict", "unknown_side_effect"}:
+        if idempotency is not None and not idempotency.created:
             raise adapter.workflow_error(
                 "idempotency_replay_blocked",
                 f"Prior idempotent draft outcome is {record.status}",
+                error_code="IDEMPOTENCY_REPLAY_BLOCKED",
             )
 
     idempotency_id = record.idempotency_id if record is not None else None
     headers = {"Idempotency-Key": request.idempotency_key} if request.idempotency_key else None
-    try:
-        async with adapter.billit_client(tool_name="billit.invoice.create_draft") as client:
+    async with adapter.billit_client(tool_name="billit.invoice.create_draft") as client:
+        try:
             response = cast(
                 "ToolResult",
                 await client.request("POST", "/orders", json=payload, headers=headers),
             )
-            order_id = order_id_from_response(response.get("data"))
-            if response.get("success") and order_id:
-                if idempotency_id is not None:
-                    await adapter.record_idempotency_outcome(
-                        idempotency_id=idempotency_id,
-                        status="succeeded",
-                        billit_resource_type="order",
-                        billit_resource_id=str(order_id),
-                    )
-                detail = cast("ToolResult", await client.request("GET", f"/orders/{order_id}"))
-                return detail if detail.get("success") else response
+        except Exception:
             if idempotency_id is not None:
                 await adapter.record_idempotency_outcome(
                     idempotency_id=idempotency_id,
-                    status="failed",
-                    billit_error_code=str(response.get("error_code") or "BILLIT_ERROR"),
+                    status="unknown_side_effect",
+                    billit_error_code="BILLIT_REQUEST_EXCEPTION",
                 )
-            return response
-    except Exception:
+            raise
+
+        order_id = order_id_from_response(response.get("data"))
+        if response.get("success") and order_id:
+            if idempotency_id is not None:
+                await adapter.record_idempotency_outcome(
+                    idempotency_id=idempotency_id,
+                    status="succeeded",
+                    billit_resource_type="order",
+                    billit_resource_id=str(order_id),
+                )
+            try:
+                detail = cast("ToolResult", await client.request("GET", f"/orders/{order_id}"))
+            except Exception:
+                return response
+            return detail if detail.get("success") else response
+
         if idempotency_id is not None:
             await adapter.record_idempotency_outcome(
                 idempotency_id=idempotency_id,
-                status="unknown_side_effect",
-                billit_error_code="BILLIT_REQUEST_EXCEPTION",
+                status="failed",
+                billit_error_code=str(response.get("error_code") or "BILLIT_ERROR"),
             )
-        raise
+        return response
 
 
 async def prepare_invoice_send(

@@ -38,6 +38,14 @@ class LocalIdempotencyRecord:
     billit_error_code: str | None
 
 
+@dataclass(frozen=True)
+class LocalIdempotencyStart:
+    """Local idempotency record plus insertion state."""
+
+    record: LocalIdempotencyRecord
+    created: bool
+
+
 class LocalStateStore:
     """SQLite-backed local state that stores only redacted operational metadata."""
 
@@ -210,7 +218,7 @@ class LocalStateStore:
         operation_type: str,
         idempotency_key_hash: str,
         operation_hash: str,
-    ) -> LocalIdempotencyRecord:
+    ) -> LocalIdempotencyStart:
         """Create or return a local idempotency record."""
 
         with self._connect() as connection:
@@ -221,7 +229,7 @@ class LocalStateStore:
                 idempotency_key_hash=idempotency_key_hash,
             )
             if existing is not None:
-                return existing
+                return LocalIdempotencyStart(record=existing, created=False)
             connection.execute(
                 """
                 insert into local_idempotency_records (
@@ -248,7 +256,7 @@ class LocalStateStore:
             )
         if created is None:  # pragma: no cover - SQLite insert succeeded but row disappeared.
             raise RuntimeError("Local idempotency record was not created")
-        return created
+        return LocalIdempotencyStart(record=created, created=True)
 
     def record_idempotency_outcome(
         self,
@@ -258,11 +266,11 @@ class LocalStateStore:
         billit_resource_type: str | None = None,
         billit_resource_id: str | None = None,
         billit_error_code: str | None = None,
-    ) -> None:
+    ) -> bool:
         """Update the final outcome of a local idempotent operation."""
 
         with self._connect() as connection:
-            connection.execute(
+            result = connection.execute(
                 """
                 update local_idempotency_records
                    set status = ?,
@@ -281,6 +289,7 @@ class LocalStateStore:
                     idempotency_id,
                 ),
             )
+            return result.rowcount == 1
 
     def audit_events(self) -> list[dict[str, Any]]:
         """Return audit events for focused local tests."""
