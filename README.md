@@ -179,12 +179,15 @@ uv run pytest tests/test_live_integration.py -q --live
 ```
 
 Run the local read-only live canary against sandbox when validating endpoint
-drift or shared composite helpers:
+drift or shared composite helpers. API-key canary mode accepts only
+`BILLIT_SANDBOX_API_KEY_K4K` from env or macOS Keychain plus an explicit
+sandbox PartyID:
 
 ```bash
 BILLIT_SANDBOX_API_KEY_K4K="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
-BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
-uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly
+BILLIT_SANDBOX_PARTY_ID="$BILLIT_SANDBOX_PARTY_ID" \
+uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly \
+  --base-url https://api.sandbox.billit.be/v1
 ```
 
 Run the hosted OAuth read-only canary only after seeding a sandbox Billit OAuth

@@ -1,6 +1,6 @@
 ---
 title: "Billit MCP - Documentation Index"
-updated: 2026-05-26
+updated: 2026-05-27
 ---
 
 # Billit MCP Documentation Index
@@ -59,6 +59,9 @@ Swagger inspection, but the packaged MCP client entrypoint is
 upstream Billit reference snapshots under `../billit_docs_markdown/`. Those
 files preserve Billit-specific payload examples and terminology without
 duplicating implementation guidance into project docs.
+
+Historical implementation plans that are still useful live under `plans/`.
+They are archival references, not the active source of truth for behavior.
 
 ## Billit MCP Documentation Maintenance
 

@@ -1,6 +1,6 @@
 ---
 title: "Billit MCP - Configuration Reference"
-updated: 2026-05-26
+updated: 2026-05-27
 ---
 
 # Billit MCP Configuration Reference
@@ -71,8 +71,10 @@ BILLIT_BASE_URL=https://api.sandbox.billit.be/v1
 BILLIT_PARTY_ID=your-sandbox-party-id
 ```
 
-For the local live canary, prefer sandbox-specific variables so production
-credentials are not selected accidentally:
+For the local API-key live canary, use sandbox-specific variables. The canary
+accepts only `BILLIT_SANDBOX_API_KEY_K4K` from env or macOS Keychain service
+`BILLIT_SANDBOX_API_KEY_K4K`, plus `BILLIT_SANDBOX_PARTY_ID` or
+`BILLIT_PARTY_ID`:
 
 ```env
 BILLIT_SANDBOX_API_KEY_K4K=your-sandbox-api-key

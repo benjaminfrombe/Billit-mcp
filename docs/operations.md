@@ -1,6 +1,6 @@
 ---
 title: "Billit MCP - Operations Runbook"
-updated: 2026-05-26
+updated: 2026-05-27
 ---
 
 # Billit MCP Operations Runbook
@@ -146,13 +146,17 @@ accidentally running tests or demos against production.
 ## Billit MCP Local Live Canary
 
 Run the local canary after endpoint or composite-helper changes. It is
-read-only, sandbox-first, refused in CI, and writes sanitized status/count
-evidence under `.local/billit-live-canary/`.
+read-only, sandbox-only in API-key mode, refused in CI, and writes sanitized
+status/count evidence under `.local/billit-live-canary/`. API-key mode accepts
+only `BILLIT_SANDBOX_API_KEY_K4K` from env or macOS Keychain service
+`BILLIT_SANDBOX_API_KEY_K4K`; generic `BILLIT_SANDBOX_API_KEY` and
+`BILLIT_API_KEY` are intentionally ignored.
 
 ```bash
 BILLIT_SANDBOX_API_KEY_K4K="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
-BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
-uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly
+BILLIT_SANDBOX_PARTY_ID="$BILLIT_SANDBOX_PARTY_ID" \
+uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly \
+  --base-url https://api.sandbox.billit.be/v1
 ```
 
 Hosted OAuth mode requires a sandbox Billit OAuth grant already stored in the

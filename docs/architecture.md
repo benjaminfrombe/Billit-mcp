@@ -1,6 +1,6 @@
 ---
 title: "Billit MCP - Architecture and Data Flow"
-updated: 2026-05-26
+updated: 2026-05-27
 ---
 
 # Billit MCP Architecture and Data Flow
@@ -88,11 +88,22 @@ Hosted mode does not call `BillitSettings.from_env()` and does not read
 `BILLIT_API_KEY` or `BILLIT_PARTY_ID`. Billit access is always through a stored
 Billit OAuth grant and an explicit, validated `company_party_id`.
 
+`src/billit_mcp/services/hosted_runtime.py` remains the facade consumed by
+hosted tool modules. Its internals are split into hosted claims, authorization,
+Billit client/audit, confirmation, and idempotency services so hosted tool
+registration stays thin without changing public tool names, arguments, scopes,
+or persistence schema.
+
 Local API-key and hosted OAuth invoice draft/send tools share the guarded
 workflow in `src/billit_mcp/services/invoice_workflow.py`. Runtime adapters own
 their own gates, scopes, company checks, idempotency state, and confirmation
 state, while the workflow owns preflight, refetch/revalidate, operation hashes,
 atomic challenge consumption, and the Billit send call ordering.
+For draft creation, an existing idempotency record is replayed only when it is
+`succeeded` with a stored Billit order id. Existing `started`, `failed`,
+`conflict`, or `unknown_side_effect` records are blocked before another
+`POST /orders`, and a detail refetch failure after a successful create does not
+downgrade the recorded success.
 
 ## Billit MCP Hosted Auth and Persistence
 

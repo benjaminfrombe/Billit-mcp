@@ -1,6 +1,6 @@
 ---
 title: "Billit MCP - Development and Testing Guide"
-updated: 2026-05-26
+updated: 2026-05-27
 ---
 
 # Billit MCP Development and Testing Guide
@@ -88,7 +88,8 @@ uv build
 Ruff, mypy, import-linter, pytest, coverage, and diff-cover are configured in
 `pyproject.toml`. Do not introduce broad exclusions without a clear reason.
 `tests/test_quality_guards.py` also keeps new runtime and canary source files
-below the review-size threshold.
+below the review-size threshold, and fails tracked root implementation
+plan/goal Markdown so archival plans stay under `docs/plans/`.
 
 ## Billit MCP Test Types
 
@@ -103,14 +104,16 @@ the same read-only sandbox canary used for local endpoint drift evidence.
 uv run pytest tests/test_live_integration.py -q --live
 ```
 
-The local live-data canary is separate from CI. It defaults to sandbox, reads
-the sandbox key from env or macOS Keychain, performs read-only probes, and
-writes sanitized evidence under `.local/`:
+The local live-data canary is separate from CI. API-key mode is sandbox-only,
+reads `BILLIT_SANDBOX_API_KEY_K4K` from env or macOS Keychain service
+`BILLIT_SANDBOX_API_KEY_K4K`, performs read-only probes, and writes sanitized
+evidence under `.local/`:
 
 ```bash
 BILLIT_SANDBOX_API_KEY_K4K="$(security find-generic-password -w -s BILLIT_SANDBOX_API_KEY_K4K)" \
-BILLIT_PARTY_ID="$BILLIT_PARTY_ID" \
-uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly
+BILLIT_SANDBOX_PARTY_ID="$BILLIT_SANDBOX_PARTY_ID" \
+uv run python scripts/local/live_billit_canary.py --read-only --mode api-key-readonly \
+  --base-url https://api.sandbox.billit.be/v1
 ```
 
 The API-key canary implementation is split from hosted OAuth canary code, so
@@ -145,12 +148,12 @@ The seed helper encrypts token material, fetches `accountInformation`, syncs
 authorized companies, and marks the connection active only after at least one
 company is synced. It prints only sanitized metadata.
 
-For sandbox runs, credential precedence is
-`BILLIT_SANDBOX_API_KEY_K4K`, `BILLIT_SANDBOX_API_KEY`, macOS Keychain service
-`BILLIT_SANDBOX_API_KEY_K4K`, then `BILLIT_API_KEY` as a compatibility fallback.
-Hosted canary mode does not automate Billit login and does not persist tokens,
-API keys, raw customer payloads, raw invoice payloads, file contents, or webhook
-bodies into the evidence report.
+For API-key sandbox runs, only `BILLIT_SANDBOX_API_KEY_K4K` from env or macOS
+Keychain service `BILLIT_SANDBOX_API_KEY_K4K` is accepted. Generic
+`BILLIT_SANDBOX_API_KEY` and `BILLIT_API_KEY` are intentionally ignored by this
+canary path. Hosted canary mode does not automate Billit login and does not
+persist tokens, API keys, raw customer payloads, raw invoice payloads, file
+contents, or webhook bodies into the evidence report.
 
 ## Billit MCP Documentation Updates
 

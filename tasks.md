@@ -1,6 +1,6 @@
 ---
 title: "Billit MCP Task Log"
-updated: 2026-05-26
+updated: 2026-05-27
 ---
 
 # Billit MCP Task Log
@@ -14,6 +14,11 @@ updated: 2026-05-26
 
 ## DONE
 
+- [x] Hardened Billit MCP review-fix blockers (2026-05-27): draft
+  idempotency now blocks unsafe replays before another Billit write, successful
+  creates are not downgraded by detail refetch failures, hosted runtime
+  internals are split behind the existing facade, API-key canary credentials
+  are sandbox/K4K-only, and root plan hygiene is guarded.
 - [x] Split the Billit MCP review stack for maintainability (2026-05-26):
   extracted a shared invoice workflow for local API-key and hosted OAuth
   draft/send safety, split the local runtime facade into focused services,
