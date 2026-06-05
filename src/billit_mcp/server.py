@@ -128,22 +128,37 @@ async def upsert_product(product_data: Dict[str, Any]) -> Dict[str, Any]:
 # Order Management Tools
 @mcp.tool()
 async def list_orders(
+    order_direction: Optional[str] = None,
+    order_type: Optional[str] = None,
     odata_filter: Optional[str] = None,
     skip: int = 0,
     top: int = 120
 ) -> Dict[str, Any]:
     """List orders (invoices, credit notes, etc.).
-    
+
     Args:
-        odata_filter: Optional OData filter expression
+        order_direction: Filter by direction - 'Cost' (expenses) or 'Income' (sales/invoices you send)
+        order_type: Filter by type - 'Invoice', 'CreditNote', 'Quotation', etc.
+        odata_filter: Optional OData filter expression (overrides order_direction/order_type if provided)
         skip: Number of records to skip for pagination
         top: Maximum number of records to return (max 120)
     """
     client = await get_client()
     params = {"$skip": skip, "$top": top}
+
+    # Build filter from direction/type if provided
+    filters = []
+    if order_direction:
+        filters.append(f"OrderDirection eq '{order_direction}'")
+    if order_type:
+        filters.append(f"OrderType eq '{order_type}'")
+
+    # Use custom filter or built filter
     if odata_filter:
         params["$filter"] = odata_filter
-    
+    elif filters:
+        params["$filter"] = " and ".join(filters)
+
     return await client.request("GET", "/orders", params=params)
 
 
