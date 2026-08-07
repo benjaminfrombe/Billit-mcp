@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Billit MCP Server - Model Context Protocol server for Billit API integration."""
 
+import base64
+import mimetypes
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
@@ -404,16 +407,38 @@ async def list_documents(
 
 
 @mcp.tool()
-async def upload_document(file_path: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
-    """Upload a document.
-    
+async def upload_document(
+    file_path: str, metadata: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Upload a document, for example a purchase invoice PDF.
+
+    Billit expects the file itself, base64 encoded, inside a nested ``File``
+    object. Posting only the path makes the API reject the request with
+    ``TheFileCannotBeEmpty``.
+
     Args:
-        file_path: Path to the file to upload
-        metadata: Document metadata
+        file_path: Path to the file to upload.
+        metadata: Optional extra fields merged into the request body, for
+            example ``{"DocumentDate": "2026-04-28T00:00:00", "Tags": ["invoice"]}``.
+            A nested ``"File"`` key is merged into the file object, so callers
+            can override ``FileName`` or ``MimeType``.
     """
+    path = Path(file_path).expanduser()
+    if not path.is_file():
+        raise ValueError(f"File not found: {file_path}")
+
+    extra = dict(metadata or {})
+    file_overrides = dict(extra.pop("File", None) or {})
+
+    file_obj: Dict[str, Any] = {
+        "FileName": path.name,
+        "FileContent": base64.b64encode(path.read_bytes()).decode("ascii"),
+        "MimeType": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+    }
+    file_obj.update(file_overrides)
+
     client = await get_client()
-    data = {"file_path": file_path, "metadata": metadata}
-    return await client.request("POST", "/documents", json=data)
+    return await client.request("POST", "/documents", json={"File": file_obj, **extra})
 
 
 @mcp.tool()
