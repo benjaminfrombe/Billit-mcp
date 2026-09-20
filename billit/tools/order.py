@@ -110,7 +110,7 @@ async def record_payment(
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Record a payment for an order."""
-    return await client.request("POST", f"/orders/{order_id}/payment", json=payment_info)
+    return await client.request("POST", f"/orders/{order_id}/payments", json=payment_info)
 
 
 @router.post("/orders/send")

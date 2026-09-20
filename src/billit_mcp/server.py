@@ -216,7 +216,7 @@ async def record_payment(order_id: int, payment_info: Dict[str, Any]) -> Dict[st
         payment_info: Payment details including amount, date, etc.
     """
     client = await get_client()
-    return await client.request("POST", f"/orders/{order_id}/payment", json=payment_info)
+    return await client.request("POST", f"/orders/{order_id}/payments", json=payment_info)
 
 
 @mcp.tool()
