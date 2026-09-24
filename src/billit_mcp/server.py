@@ -211,15 +211,30 @@ async def delete_order(order_id: int) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def record_payment(order_id: int, payment_info: Dict[str, Any]) -> Dict[str, Any]:
+async def record_payment(
+    order_id: int,
+    payment_info: Dict[str, Any],
+    paid_date: Optional[str] = None
+) -> Dict[str, Any]:
     """Record a payment for an order.
     
     Args:
         order_id: The ID of the order
-        payment_info: Payment details including amount, date, etc.
+        payment_info: Payment details including amount, date, etc. (e.g. {"Amount": 123.45})
+        paid_date: Optional actual payment date (YYYY-MM-DD or ISO datetime). When
+            provided, the order's PaidDate is set to this value after the payment is
+            recorded (a date-only value gets T00:00:00 appended, the API rejects
+            date-only timestamps). Without it the API sets PaidDate to now. If the
+            payment POST fails, no PaidDate patch is sent.
     """
     client = await get_client()
-    return await client.request("POST", f"/orders/{order_id}/payments", json=payment_info)
+    result = await client.request("POST", f"/orders/{order_id}/payments", json=payment_info)
+    if paid_date and result.get("success"):
+        pd = paid_date if "T" in paid_date else f"{paid_date}T00:00:00"
+        result["paid_date_patch"] = await client.request(
+            "PATCH", f"/orders/{order_id}", json={"PaidDate": pd}
+        )
+    return result
 
 
 @mcp.tool()

@@ -187,6 +187,66 @@ async def test_record_payment(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_record_payment_with_paid_date(monkeypatch):
+    """paid_date query param triggers an extra PATCH with a normalized datetime."""
+    calls = []
+
+    async def fake_request(method, url, **kwargs):
+        calls.append((method, url, kwargs.get("json")))
+        return {"success": True, "data": {"success": True}, "error": None, "error_code": None}
+
+    monkeypatch.setattr(
+        "billit.client.BillitAPIClient.request",
+        lambda self, method, url, **kwargs: fake_request(method, url, **kwargs)
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/orders/123/payments?paid_date=2026-08-18", json={"Amount": 58.66}
+        )
+
+    assert response.status_code == 200
+    assert calls[0] == ("POST", "/orders/123/payments", {"Amount": 58.66})
+    assert calls[1] == ("PATCH", "/orders/123", {"PaidDate": "2026-08-18T00:00:00"})
+    result = response.json()
+    assert result["success"] is True
+    assert "paid_date_patch" in result
+
+
+@pytest.mark.asyncio
+async def test_record_payment_paid_date_skipped_when_post_fails(monkeypatch):
+    """No PaidDate PATCH when the payment POST fails."""
+    calls = []
+
+    async def fake_request(method, url, **kwargs):
+        calls.append((method, url))
+        if method == "POST":
+            return {
+                "success": False,
+                "data": None,
+                "error": [{"Code": "TheMaxAmountToAssignIs_0_"}],
+                "error_code": None,
+            }
+        return {"success": True, "data": {"success": True}, "error": None, "error_code": None}
+
+    monkeypatch.setattr(
+        "billit.client.BillitAPIClient.request",
+        lambda self, method, url, **kwargs: fake_request(method, url, **kwargs)
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/orders/123/payments?paid_date=2026-08-18", json={"Amount": 0.01}
+        )
+
+    assert response.status_code == 200
+    assert [c[0] for c in calls] == ["POST"]
+    result = response.json()
+    assert result["success"] is False
+    assert "paid_date_patch" not in result
+
+
+@pytest.mark.asyncio
 async def test_send_order(monkeypatch):
     """Test sending orders."""
     send_data = {

@@ -107,10 +107,24 @@ async def delete_order(
 async def record_payment(
     order_id: int,
     payment_info: dict[str, Any],
+    paid_date: str | None = None,
     client: BillitAPIClient = Depends(get_client),
 ) -> dict[str, Any]:
-    """Record a payment for an order."""
-    return await client.request("POST", f"/orders/{order_id}/payments", json=payment_info)
+    """Record a payment for an order.
+
+    Optional paid_date (YYYY-MM-DD or ISO datetime, query param) sets the
+    order's PaidDate after the payment is recorded; a date-only value gets
+    T00:00:00 appended (the API rejects date-only timestamps). Without it the
+    API sets PaidDate to now. If the payment POST fails, no PaidDate patch is
+    sent.
+    """
+    result = await client.request("POST", f"/orders/{order_id}/payments", json=payment_info)
+    if paid_date and result.get("success"):
+        pd = paid_date if "T" in paid_date else f"{paid_date}T00:00:00"
+        result["paid_date_patch"] = await client.request(
+            "PATCH", f"/orders/{order_id}", json={"PaidDate": pd}
+        )
+    return result
 
 
 @router.post("/orders/send")
